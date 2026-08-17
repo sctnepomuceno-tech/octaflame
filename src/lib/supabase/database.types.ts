@@ -845,6 +845,18 @@ export interface Database {
         Args: { p_item_type: "canister_shell" | "crate"; p_quantity: number; p_notes?: string | null };
         Returns: undefined;
       };
+      period_close_precheck: {
+        Args: { p_year: number; p_month: number };
+        Returns: { check_name: string; item_count: number; description: string }[];
+      };
+      close_accounting_period: {
+        Args: { p_year: number; p_month: number };
+        Returns: undefined;
+      };
+      reopen_accounting_period: {
+        Args: { p_year: number; p_month: number; p_reason: string };
+        Returns: undefined;
+      };
     };
     Enums: Record<string, never>;
     CompositeTypes: Record<string, never>;

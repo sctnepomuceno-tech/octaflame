@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Home, ListChecks, ListTodo, Package, Plus, Receipt, Route, Truck, Users, UsersRound, Megaphone } from "lucide-react";
+import { CalendarCheck, FileDown, History, Home, ListChecks, ListTodo, MapPin, Package, PackageSearch, Plus, Receipt, Route, Truck, Users, UsersRound, Megaphone } from "lucide-react";
 
 import { profileHasPermission, type PermissionKey, type Role } from "@/lib/permissions";
 
@@ -100,9 +100,24 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
+    label: "Reports",
+    items: [
+      {
+        label: "Reports",
+        href: "/reports",
+        icon: FileDown,
+        permission: ["reports.read.own", "reports.read.all"],
+      },
+    ],
+  },
+  {
     label: "Administration",
     items: [
       { label: "Users", href: "/settings/users", icon: Users, permission: "users.manage" },
+      { label: "Territories", href: "/settings/territories", icon: MapPin, permission: "settings.manage" },
+      { label: "Products", href: "/settings/products", icon: PackageSearch, permission: "products.manage" },
+      { label: "Periods", href: "/settings/periods", icon: CalendarCheck, permission: "settings.manage" },
+      { label: "Audit log", href: "/settings/audit-log", icon: History, permission: "audit.read" },
     ],
   },
 ];

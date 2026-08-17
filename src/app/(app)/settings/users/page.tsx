@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 
 import { requirePermission } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
@@ -108,7 +109,11 @@ export default async function UsersPage() {
             <TableBody>
               {profiles.map((profile) => (
                 <TableRow key={profile.id}>
-                  <TableCell>{profile.full_name}</TableCell>
+                  <TableCell>
+                    <Link href={`/settings/users/${profile.id}`} className="font-medium hover:underline">
+                      {profile.full_name}
+                    </Link>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{profile.email}</TableCell>
                   <TableCell>
                     <Badge variant="secondary">{ROLE_LABELS[profile.role]}</Badge>

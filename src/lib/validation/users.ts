@@ -15,3 +15,24 @@ export const inviteUserSchema = z
   });
 
 export type InviteUserInput = z.infer<typeof inviteUserSchema>;
+
+export const updateUserSchema = z
+  .object({
+    role: z.enum(["management", "dsp", "warehouse", "office", "viewer"]),
+    dspId: z.string().uuid().optional().nullable(),
+    permissions: z.array(z.string()),
+    confirmEmail: z.string().trim().optional(),
+  })
+  .refine((data) => data.role !== "dsp" || !!data.dspId, {
+    message: "DSP role requires a territory assignment",
+    path: ["dspId"],
+  });
+
+export type UpdateUserInput = z.infer<typeof updateUserSchema>;
+
+export const deactivateUserSchema = z.object({
+  reassignTasksTo: z.enum(["replacement", "self", "none"]),
+  replacementUserId: z.string().uuid().optional().nullable(),
+});
+
+export type DeactivateUserInput = z.infer<typeof deactivateUserSchema>;
