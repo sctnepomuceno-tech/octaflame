@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { CalendarCheck, FileDown, History, Home, ListChecks, ListTodo, MapPin, Package, PackageSearch, Plus, Receipt, Route, Truck, Users, UsersRound, Megaphone } from "lucide-react";
+import { BarChart3, Bell, CalendarCheck, FileDown, History, Home, ListChecks, ListTodo, MapPin, Package, PackageSearch, Plus, Receipt, Route, Truck, Users, UsersRound, Megaphone } from "lucide-react";
 
 import { profileHasPermission, type PermissionKey, type Role } from "@/lib/permissions";
 
@@ -108,6 +108,12 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: FileDown,
         permission: ["reports.read.own", "reports.read.all"],
       },
+      {
+        label: "Analytics",
+        href: "/analytics",
+        icon: BarChart3,
+        permission: "dashboard.management",
+      },
     ],
   },
   {
@@ -118,6 +124,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Products", href: "/settings/products", icon: PackageSearch, permission: "products.manage" },
       { label: "Periods", href: "/settings/periods", icon: CalendarCheck, permission: "settings.manage" },
       { label: "Audit log", href: "/settings/audit-log", icon: History, permission: "audit.read" },
+      { label: "Notifications", href: "/settings/notifications", icon: Bell, permission: "notifications.manage" },
     ],
   },
 ];

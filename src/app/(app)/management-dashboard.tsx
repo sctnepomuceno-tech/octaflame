@@ -11,6 +11,8 @@ import { todayDateString, type Period } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import { AnimatedNumber } from "@/components/motion/animated-number";
+import { StaggerGrid, StaggerItem } from "@/components/motion/stagger-grid";
 import { ManagementTier2 } from "./management-tier2";
 
 const CURRENT_YEAR = new Date().getFullYear();
@@ -19,14 +21,14 @@ function KpiCard({
   title,
   actual,
   target,
-  actualLabel,
+  format,
   targetLabel,
   summary,
 }: {
   title: string;
   actual: number;
   target: number;
-  actualLabel: string;
+  format: "count" | "mt";
   targetLabel: string;
   summary: string;
 }) {
@@ -43,7 +45,9 @@ function KpiCard({
           </Badge>
         </div>
         <div className="flex items-baseline gap-2">
-          <span className="text-4xl font-bold tabular-nums">{actualLabel}</span>
+          <span className="text-4xl font-bold tabular-nums">
+            <AnimatedNumber value={actual} format={format} />
+          </span>
           <span className="text-lg text-muted-foreground">/ {targetLabel}</span>
         </div>
         <div className="h-2.5 overflow-hidden rounded-full bg-muted">
@@ -178,24 +182,28 @@ export async function ManagementDashboard({ period }: { period: Period }) {
         <p className="text-sm text-muted-foreground">Are we on track? What needs me today?</p>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
-        <KpiCard
-          title="Unique RTL + WS accounts"
-          actual={totalAccounts}
-          target={accountsTarget}
-          actualLabel={formatCount(totalAccounts)}
-          targetLabel={formatCount(accountsTarget)}
-          summary={accountsPaceSummary(accountsPace)}
-        />
-        <KpiCard
-          title="Volume"
-          actual={totalVolumeMt}
-          target={volumeTargetMt}
-          actualLabel={formatMt(totalVolumeMt)}
-          targetLabel={formatMt(volumeTargetMt)}
-          summary={volumePaceSummary(volumePace, volumeTargetMt, requiredCratesPerMonth, formatMt)}
-        />
-      </div>
+      <StaggerGrid className="grid gap-4 sm:grid-cols-2">
+        <StaggerItem>
+          <KpiCard
+            title="Unique RTL + WS accounts"
+            actual={totalAccounts}
+            target={accountsTarget}
+            format="count"
+            targetLabel={formatCount(accountsTarget)}
+            summary={accountsPaceSummary(accountsPace)}
+          />
+        </StaggerItem>
+        <StaggerItem>
+          <KpiCard
+            title="Volume"
+            actual={totalVolumeMt}
+            target={volumeTargetMt}
+            format="mt"
+            targetLabel={formatMt(volumeTargetMt)}
+            summary={volumePaceSummary(volumePace, volumeTargetMt, requiredCratesPerMonth, formatMt)}
+          />
+        </StaggerItem>
+      </StaggerGrid>
 
       <Suspense fallback={<Skeleton className="h-12 w-full" />}>
         <ExceptionsStrip />

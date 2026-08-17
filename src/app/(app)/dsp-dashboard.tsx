@@ -17,6 +17,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { AnimatedNumber } from "@/components/motion/animated-number";
+import { StaggerGrid, StaggerItem } from "@/components/motion/stagger-grid";
 import { TaskQuickComplete } from "./tasks/task-quick-complete";
 import type { Database } from "@/lib/supabase/database.types";
 
@@ -83,12 +85,24 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: "ytd", label: "YTD" },
 ];
 
-function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function StatCard({
+  label,
+  value,
+  format,
+  sub,
+}: {
+  label: string;
+  value: number;
+  format: "currency" | "kg" | "count";
+  sub?: string;
+}) {
   return (
     <Card className="p-4">
       <CardContent className="p-0">
         <div className="text-xs text-muted-foreground">{label}</div>
-        <div className="text-2xl font-semibold tabular-nums">{value}</div>
+        <div className="text-2xl font-semibold tabular-nums">
+          <AnimatedNumber value={value} format={format} />
+        </div>
         {sub ? <div className="text-xs text-muted-foreground">{sub}</div> : null}
       </CardContent>
     </Card>
@@ -367,12 +381,20 @@ export async function DspDashboard({
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Revenue" value={formatCurrency(totalAmount)} />
-        <StatCard label="Volume" value={formatKg(totalVolumeKg)} sub={formatMt(kgToMt(totalVolumeKg))} />
-        <StatCard label="Canisters" value={formatCount(totalCanisters)} sub={`${formatCount(totalCrates)} crates`} />
-        <StatCard label="Accounts reached" value={formatCount(uniqueAccounts)} sub={`${repeatPurchases} repeat`} />
-      </div>
+      <StaggerGrid className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <StaggerItem>
+          <StatCard label="Revenue" value={totalAmount} format="currency" />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="Volume" value={totalVolumeKg} format="kg" sub={formatMt(kgToMt(totalVolumeKg))} />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="Canisters" value={totalCanisters} format="count" sub={`${formatCount(totalCrates)} crates`} />
+        </StaggerItem>
+        <StaggerItem>
+          <StatCard label="Accounts reached" value={uniqueAccounts} format="count" sub={`${repeatPurchases} repeat`} />
+        </StaggerItem>
+      </StaggerGrid>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <Card>

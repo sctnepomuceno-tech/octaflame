@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Menu } from "lucide-react";
+import { Menu, Search } from "lucide-react";
 
 import type { Role } from "@/lib/permissions";
 import type { NavSection } from "@/lib/nav";
@@ -15,6 +15,9 @@ import {
 import { NavLinks } from "@/components/nav-links";
 import { UserMenu } from "@/components/user-menu";
 import { SyncIndicator } from "@/components/sync-indicator";
+import { NotificationBell } from "@/components/notification-bell";
+import { CommandPalette } from "@/components/command-palette";
+import { PageTransition } from "@/components/motion/page-transition";
 
 interface AppShellProps {
   sections: NavSection[];
@@ -43,11 +46,25 @@ export function AppShell({
           </div>
           <span className="font-semibold tracking-tight">Octaflame OS</span>
         </div>
+        <div className="p-3 pb-0">
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("open-command-palette"))}
+            className="flex w-full items-center gap-2 rounded-md border border-sidebar-border bg-sidebar-accent/40 px-2.5 py-1.5 text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent"
+          >
+            <Search className="size-3.5" />
+            <span className="flex-1 text-left">Search…</span>
+            <kbd className="rounded border border-sidebar-border px-1 text-[10px]">⌘K</kbd>
+          </button>
+        </div>
         <div className="flex-1 overflow-y-auto p-3">
           <NavLinks sections={sections} />
         </div>
-        <div className="border-t border-sidebar-border p-2">
-          <UserMenu fullName={fullName} email={email} role={role} />
+        <div className="flex items-center gap-1 border-t border-sidebar-border p-2">
+          <div className="min-w-0 flex-1">
+            <UserMenu fullName={fullName} email={email} role={role} />
+          </div>
+          <NotificationBell />
         </div>
       </aside>
 
@@ -75,14 +92,27 @@ export function AppShell({
               </div>
             </SheetContent>
           </Sheet>
-          <span className="font-semibold tracking-tight">Octaflame OS</span>
+          <span className="flex-1 font-semibold tracking-tight">Octaflame OS</span>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Search"
+            onClick={() => window.dispatchEvent(new Event("open-command-palette"))}
+          >
+            <Search />
+          </Button>
+          <NotificationBell />
         </header>
 
         <div className="print:hidden">
           <SyncIndicator />
         </div>
-        <main className="flex-1 overflow-y-auto">{children}</main>
+        <main className="flex-1 overflow-y-auto">
+          <PageTransition>{children}</PageTransition>
+        </main>
       </div>
+
+      <CommandPalette />
     </div>
   );
 }

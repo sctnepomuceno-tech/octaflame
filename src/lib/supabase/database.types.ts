@@ -671,6 +671,46 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["activity_log"]["Row"]>;
         Relationships: [];
       };
+      notification_rules: {
+        Row: {
+          id: string;
+          rule_key: string;
+          label: string;
+          description: string;
+          enabled: boolean;
+          threshold: number | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["notification_rules"]["Row"]> & {
+          rule_key: string;
+          label: string;
+          description: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["notification_rules"]["Row"]>;
+        Relationships: [];
+      };
+      notifications: {
+        Row: {
+          id: string;
+          user_id: string;
+          rule_key: string;
+          title: string;
+          body: string | null;
+          link: string | null;
+          reference_table: string | null;
+          reference_id: string | null;
+          read_at: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["notifications"]["Row"]> & {
+          user_id: string;
+          rule_key: string;
+          title: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["notifications"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: {
       dsp_stock_balance: {
@@ -855,6 +895,10 @@ export interface Database {
       };
       reopen_accounting_period: {
         Args: { p_year: number; p_month: number; p_reason: string };
+        Returns: undefined;
+      };
+      run_scheduled_notification_checks: {
+        Args: Record<string, never>;
         Returns: undefined;
       };
     };
