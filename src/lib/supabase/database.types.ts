@@ -390,6 +390,7 @@ export interface Database {
           acknowledged_at: string | null;
           dispute_reason: string | null;
           notes: string | null;
+          truck_report_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -508,6 +509,101 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["sale_returns"]["Row"]>;
         Relationships: [];
       };
+      stock_movements: {
+        Row: {
+          id: string;
+          item_id: string;
+          movement_type: "in" | "out" | "transfer" | "adjustment" | "return";
+          quantity: number;
+          direction: "in" | "out";
+          movement_date: string;
+          source: string | null;
+          destination_dsp_id: string | null;
+          destination_municipality_id: string | null;
+          truck_report_id: string | null;
+          reference_no: string | null;
+          reason: string | null;
+          remarks: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["stock_movements"]["Row"]> & {
+          item_id: string;
+          movement_type: "in" | "out" | "transfer" | "adjustment" | "return";
+          quantity: number;
+          direction: "in" | "out";
+        };
+        Update: Partial<Database["public"]["Tables"]["stock_movements"]["Row"]>;
+        Relationships: [];
+      };
+      truck_reports: {
+        Row: {
+          id: string;
+          report_date: string;
+          truck_plate: string | null;
+          driver_name: string | null;
+          helper_name: string | null;
+          dsp_id: string | null;
+          destination_municipality_ids: string[];
+          crates_out: number;
+          crates_returned: number;
+          empty_crates_collected: number;
+          stoves_out: number;
+          stoves_returned: number;
+          fuel_cost: number;
+          odometer_start: number | null;
+          odometer_end: number | null;
+          remarks: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["truck_reports"]["Row"]>;
+        Update: Partial<Database["public"]["Tables"]["truck_reports"]["Row"]>;
+        Relationships: [];
+      };
+      collateral_items: {
+        Row: {
+          id: string;
+          name: string;
+          category: string | null;
+          unit: string;
+          reorder_level: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["collateral_items"]["Row"]> & { name: string };
+        Update: Partial<Database["public"]["Tables"]["collateral_items"]["Row"]>;
+        Relationships: [];
+      };
+      collateral_movements: {
+        Row: {
+          id: string;
+          item_id: string;
+          movement_type: "in" | "out" | "adjustment" | "return";
+          quantity: number;
+          direction: "in" | "out";
+          movement_date: string;
+          assigned_to_dsp_id: string | null;
+          assigned_to_municipality_id: string | null;
+          assigned_to_customer_id: string | null;
+          received_by: string | null;
+          reference_no: string | null;
+          reason: string | null;
+          remarks: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["collateral_movements"]["Row"]> & {
+          item_id: string;
+          movement_type: "in" | "out" | "adjustment" | "return";
+          quantity: number;
+          direction: "in" | "out";
+        };
+        Update: Partial<Database["public"]["Tables"]["collateral_movements"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: {
       dsp_stock_balance: {
@@ -535,6 +631,18 @@ export interface Database {
           last_count_date: string | null;
           variance: number | null;
         };
+        Relationships: [];
+      };
+      warehouse_stock_balance: {
+        Row: { item_id: string; balance: number };
+        Relationships: [];
+      };
+      collateral_balance: {
+        Row: { item_id: string; balance: number };
+        Relationships: [];
+      };
+      collateral_dsp_allocation: {
+        Row: { dsp_id: string; item_id: string; year: number; quantity: number };
         Relationships: [];
       };
     };
@@ -636,6 +744,39 @@ export interface Database {
           p_notes: string | null;
         };
         Returns: string;
+      };
+      record_warehouse_stock_in: {
+        Args: {
+          p_item_id: string;
+          p_quantity: number;
+          p_source: string | null;
+          p_reference_no: string | null;
+          p_remarks: string | null;
+        };
+        Returns: undefined;
+      };
+      record_warehouse_adjustment: {
+        Args: {
+          p_item_id: string;
+          p_quantity: number;
+          p_direction: "in" | "out";
+          p_reason: string;
+          p_remarks: string | null;
+        };
+        Returns: undefined;
+      };
+      dsp_to_warehouse_transfer: {
+        Args: {
+          p_dsp_id: string;
+          p_item_type: "canister_shell" | "crate";
+          p_quantity: number;
+          p_notes?: string | null;
+        };
+        Returns: undefined;
+      };
+      warehouse_to_plant_transfer: {
+        Args: { p_item_type: "canister_shell" | "crate"; p_quantity: number; p_notes?: string | null };
+        Returns: undefined;
       };
     };
     Enums: Record<string, never>;

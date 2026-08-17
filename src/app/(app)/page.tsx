@@ -9,6 +9,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DspDashboard } from "./dsp-dashboard";
 import { ManagementDashboard } from "./management-dashboard";
+import { WarehouseDashboard } from "./warehouse-dashboard";
+import { OfficeDashboard } from "./office-dashboard";
 
 const VALID_PERIODS: Period[] = ["today", "wtd", "mtd", "ytd"];
 
@@ -57,6 +59,14 @@ export default async function HomePage(props: {
         <ManagementDashboard period={period} />
       </>
     );
+  }
+
+  if (profileHasPermission(profile, "dashboard.warehouse")) {
+    return <WarehouseDashboard />;
+  }
+
+  if (profileHasPermission(profile, "dashboard.office")) {
+    return <OfficeDashboard />;
   }
 
   return (
