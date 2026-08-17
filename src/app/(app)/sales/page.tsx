@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { requireAnyPermission } from "@/lib/auth/current-user";
+import { requireAnyPermission, profileHasPermission } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency, formatKg } from "@/lib/volume";
+import type { CustomerType, PaymentStatus } from "@/lib/supabase/database.types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,10 +16,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { SalesFilters } from "./sales-filters";
 
 export const metadata: Metadata = { title: "Sales" };
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 
 const PAYMENT_VARIANT: Record<string, "success" | "warning" | "destructive"> = {
   paid: "success",
@@ -26,20 +28,44 @@ const PAYMENT_VARIANT: Record<string, "success" | "warning" | "destructive"> = {
   unpaid: "destructive",
 };
 
-export default async function SalesPage() {
-  await requireAnyPermission(["sales.read.own", "sales.read.all"]);
+const CUSTOMER_TYPES: CustomerType[] = ["HH", "RTL", "WS"];
+const PAYMENT_STATUSES: PaymentStatus[] = ["paid", "partial", "unpaid"];
+
+export default async function SalesPage(props: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const profile = await requireAnyPermission(["sales.read.own", "sales.read.all"]);
+  const params = await props.searchParams;
+  const from = typeof params.from === "string" ? params.from : "";
+  const to = typeof params.to === "string" ? params.to : "";
+  const dspParam = typeof params.dsp === "string" ? params.dsp : "all";
+  const municipalityParam = typeof params.municipality === "string" ? params.municipality : "all";
+  const typeParam = CUSTOMER_TYPES.find((t) => t === params.type);
+  const paymentParam = PAYMENT_STATUSES.find((p) => p === params.payment);
+
+  const canSeeAll = profileHasPermission(profile, "sales.read.all");
 
   const supabase = await createClient();
 
-  const [{ data: sales }, { data: customers }, { data: municipalities }] = await Promise.all([
-    supabase
-      .from("sales")
-      .select("id, sale_date, receipt_no, customer_id, municipality_id, payment_status, total_amount, total_volume_kg, notes")
-      .order("sale_date", { ascending: false })
-      .order("created_at", { ascending: false })
-      .limit(PAGE_SIZE),
+  let query = supabase
+    .from("sales")
+    .select("id, sale_date, receipt_no, customer_id, dsp_id, municipality_id, payment_status, total_amount, total_volume_kg, notes")
+    .order("sale_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(PAGE_SIZE);
+
+  if (from) query = query.gte("sale_date", from);
+  if (to) query = query.lte("sale_date", to);
+  if (dspParam !== "all") query = query.eq("dsp_id", dspParam);
+  if (municipalityParam !== "all") query = query.eq("municipality_id", municipalityParam);
+  if (typeParam) query = query.eq("customer_type", typeParam);
+  if (paymentParam) query = query.eq("payment_status", paymentParam);
+
+  const [{ data: sales }, { data: customers }, { data: municipalities }, { data: dsps }] = await Promise.all([
+    query,
     supabase.from("customers").select("id, business_name, owner_name"),
     supabase.from("municipalities").select("id, name"),
+    canSeeAll ? supabase.from("dsps").select("id, name").eq("active", true).order("name") : Promise.resolve({ data: [] }),
   ]);
 
   const customerLabelById = new Map(
@@ -58,6 +84,8 @@ export default async function SalesPage() {
           <Link href="/sales/new">New sale</Link>
         </Button>
       </div>
+
+      <SalesFilters dsps={dsps ?? []} municipalities={municipalities ?? []} />
 
       {/* Desktop table */}
       <Card className="hidden overflow-hidden py-0 md:block">
@@ -99,11 +127,7 @@ export default async function SalesPage() {
             {(sales ?? []).length === 0 ? (
               <TableRow>
                 <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
-                  No sales yet.{" "}
-                  <Link href="/sales/new" className="underline">
-                    Record the first one
-                  </Link>
-                  .
+                  No sales match these filters.
                 </TableCell>
               </TableRow>
             ) : null}
@@ -136,13 +160,7 @@ export default async function SalesPage() {
           </Link>
         ))}
         {(sales ?? []).length === 0 ? (
-          <p className="py-10 text-center text-muted-foreground">
-            No sales yet.{" "}
-            <Link href="/sales/new" className="underline">
-              Record the first one
-            </Link>
-            .
-          </p>
+          <p className="py-10 text-center text-muted-foreground">No sales match these filters.</p>
         ) : null}
       </div>
     </div>

@@ -8,6 +8,7 @@ import type { Period } from "@/lib/dates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { DspDashboard } from "./dsp-dashboard";
+import { ManagementDashboard } from "./management-dashboard";
 
 const VALID_PERIODS: Period[] = ["today", "wtd", "mtd", "ytd"];
 
@@ -41,6 +42,19 @@ export default async function HomePage(props: {
           </div>
         ) : null}
         <DspDashboard dspId={profile.dsp_id} dspName={dsp?.name ?? "Your territory"} period={period} />
+      </>
+    );
+  }
+
+  if (profileHasPermission(profile, "dashboard.management")) {
+    return (
+      <>
+        {singleManagementAccount ? (
+          <div className="mx-auto max-w-6xl p-6 pb-0">
+            <SingleManagementBanner />
+          </div>
+        ) : null}
+        <ManagementDashboard period={period} />
       </>
     );
   }
