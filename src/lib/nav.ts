@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Home, Plus, Receipt, Users, UsersRound } from "lucide-react";
+import { Home, Package, Plus, Receipt, Users, UsersRound } from "lucide-react";
 
 import { profileHasPermission, type PermissionKey, type Role } from "@/lib/permissions";
 
@@ -50,6 +50,17 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/sales",
         icon: Receipt,
         permission: ["sales.read.own", "sales.read.all"],
+      },
+    ],
+  },
+  {
+    label: "Warehouse",
+    items: [
+      {
+        label: "Stock issuances",
+        href: "/stock/issuances",
+        icon: Package,
+        permission: ["warehouse.read", "warehouse.create"],
       },
     ],
   },

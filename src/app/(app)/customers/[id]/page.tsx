@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/table";
 import { CustomerStatusBadge } from "../customer-status-badge";
 import { EditCustomerButton } from "./edit-customer-button";
+import { RecordEmptiesButton } from "@/components/record-empties-button";
 
 export const metadata: Metadata = { title: "Customer" };
 
@@ -28,16 +29,18 @@ export default async function CustomerDetailPage(props: {
 
   const supabase = await createClient();
 
-  const [{ data: customer }, { data: municipalities }, { data: sales }] = await Promise.all([
-    supabase.from("customers").select("*").eq("id", id).single(),
-    supabase.from("municipalities").select("id, name"),
-    supabase
-      .from("sales")
-      .select("id, sale_date, receipt_no, total_amount, total_volume_kg, payment_status, empties_variance")
-      .eq("customer_id", id)
-      .order("sale_date", { ascending: false })
-      .limit(10),
-  ]);
+  const [{ data: customer }, { data: municipalities }, { data: sales }, { data: emptiesBalances }] =
+    await Promise.all([
+      supabase.from("customers").select("*").eq("id", id).single(),
+      supabase.from("municipalities").select("id, name"),
+      supabase
+        .from("sales")
+        .select("id, sale_date, receipt_no, total_amount, total_volume_kg, payment_status, empties_variance")
+        .eq("customer_id", id)
+        .order("sale_date", { ascending: false })
+        .limit(10),
+      supabase.from("customer_empties_balance").select("item_type, balance").eq("customer_id", id),
+    ]);
 
   if (!customer) {
     notFound();
@@ -46,7 +49,10 @@ export default async function CustomerDetailPage(props: {
   const municipalityName =
     (municipalities ?? []).find((m) => m.id === customer.municipality_id)?.name ?? "—";
 
-  const emptiesOwed = (sales ?? []).reduce((sum, s) => sum + Math.max(s.empties_variance, 0), 0);
+  const emptiesOwed = Math.max(
+    (emptiesBalances ?? []).find((b) => b.item_type === "canister_shell")?.balance ?? 0,
+    0
+  );
 
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 p-6">
@@ -69,8 +75,11 @@ export default async function CustomerDetailPage(props: {
 
       {emptiesOwed > 0 ? (
         <Card className="border-warning/40 bg-warning/5">
-          <CardContent className="flex items-center gap-2 py-4 text-sm">
-            ⚠ Owes an estimated <span className="font-semibold tabular-nums">{formatCount(emptiesOwed)}</span> empty shell{emptiesOwed === 1 ? "" : "s"} across recent sales.
+          <CardContent className="flex items-center justify-between gap-2 py-4 text-sm">
+            <span>
+              ⚠ Owes <span className="font-semibold tabular-nums">{formatCount(emptiesOwed)}</span> empty shell{emptiesOwed === 1 ? "" : "s"}.
+            </span>
+            <RecordEmptiesButton customerId={id} owed={emptiesOwed} />
           </CardContent>
         </Card>
       ) : null}

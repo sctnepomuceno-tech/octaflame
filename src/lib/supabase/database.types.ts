@@ -334,8 +334,210 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["accounting_periods"]["Row"]>;
         Relationships: [];
       };
+      inventory_items: {
+        Row: {
+          id: string;
+          name: string;
+          category: "crate" | "canister" | "stove" | "other";
+          unit: string;
+          reorder_level: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["inventory_items"]["Row"]> & {
+          name: string;
+          category: "crate" | "canister" | "stove" | "other";
+        };
+        Update: Partial<Database["public"]["Tables"]["inventory_items"]["Row"]>;
+        Relationships: [];
+      };
+      dsp_stock_movements: {
+        Row: {
+          id: string;
+          dsp_id: string;
+          item_id: string;
+          quantity: number;
+          direction: "in" | "out";
+          movement_type: "issued" | "sold" | "returned_to_warehouse" | "transfer_in" | "transfer_out" | "damaged" | "adjustment";
+          movement_date: string;
+          reference_table: string | null;
+          reference_id: string | null;
+          reason: string | null;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["dsp_stock_movements"]["Row"]> & {
+          dsp_id: string;
+          item_id: string;
+          quantity: number;
+          direction: "in" | "out";
+          movement_type: "issued" | "sold" | "returned_to_warehouse" | "transfer_in" | "transfer_out" | "damaged" | "adjustment";
+        };
+        Update: Partial<Database["public"]["Tables"]["dsp_stock_movements"]["Row"]>;
+        Relationships: [];
+      };
+      stock_issuances: {
+        Row: {
+          id: string;
+          issuance_no: string;
+          dsp_id: string;
+          issued_by: string | null;
+          issue_date: string;
+          status: "pending" | "acknowledged" | "disputed";
+          acknowledged_by: string | null;
+          acknowledged_at: string | null;
+          dispute_reason: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["stock_issuances"]["Row"]> & { dsp_id: string };
+        Update: Partial<Database["public"]["Tables"]["stock_issuances"]["Row"]>;
+        Relationships: [];
+      };
+      stock_issuance_items: {
+        Row: {
+          id: string;
+          issuance_id: string;
+          item_id: string;
+          quantity_issued: number;
+          quantity_received: number | null;
+          variance: number;
+          notes: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["stock_issuance_items"]["Row"]> & {
+          issuance_id: string;
+          item_id: string;
+          quantity_issued: number;
+        };
+        Update: Partial<Database["public"]["Tables"]["stock_issuance_items"]["Row"]>;
+        Relationships: [];
+      };
+      empties_movements: {
+        Row: {
+          id: string;
+          item_type: "canister_shell" | "crate";
+          quantity: number;
+          holder_type: "customer" | "dsp" | "warehouse";
+          holder_id: string;
+          direction: "in" | "out";
+          movement_type: "collected_from_customer" | "owed_by_customer" | "returned_by_customer" | "dsp_to_warehouse" | "warehouse_to_plant" | "lost" | "damaged" | "adjustment";
+          movement_date: string;
+          reference_table: string | null;
+          reference_id: string | null;
+          reason: string | null;
+          notes: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["empties_movements"]["Row"]> & {
+          item_type: "canister_shell" | "crate";
+          quantity: number;
+          holder_type: "customer" | "dsp" | "warehouse";
+          holder_id: string;
+          direction: "in" | "out";
+          movement_type: "collected_from_customer" | "owed_by_customer" | "returned_by_customer" | "dsp_to_warehouse" | "warehouse_to_plant" | "lost" | "damaged" | "adjustment";
+        };
+        Update: Partial<Database["public"]["Tables"]["empties_movements"]["Row"]>;
+        Relationships: [];
+      };
+      stock_counts: {
+        Row: {
+          id: string;
+          scope: "dsp" | "warehouse";
+          scope_id: string;
+          count_date: string;
+          counted_by: string | null;
+          status: "draft" | "submitted" | "approved";
+          approved_by: string | null;
+          approved_at: string | null;
+          notes: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["stock_counts"]["Row"]> & {
+          scope: "dsp" | "warehouse";
+          scope_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["stock_counts"]["Row"]>;
+        Relationships: [];
+      };
+      stock_count_items: {
+        Row: {
+          id: string;
+          count_id: string;
+          item_id: string;
+          system_quantity: number;
+          counted_quantity: number | null;
+          variance: number;
+          reason: string | null;
+          notes: string | null;
+        };
+        Insert: Partial<Database["public"]["Tables"]["stock_count_items"]["Row"]> & {
+          count_id: string;
+          item_id: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["stock_count_items"]["Row"]>;
+        Relationships: [];
+      };
+      sale_returns: {
+        Row: {
+          id: string;
+          sale_id: string;
+          sale_item_id: string;
+          product_id: string;
+          quantity: number;
+          return_type: "damaged" | "leaking" | "wrong_item" | "customer_return" | "expired";
+          restockable: boolean;
+          refund_amount: number;
+          return_date: string;
+          notes: string | null;
+          created_by: string | null;
+          approved_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["sale_returns"]["Row"]> & {
+          sale_id: string;
+          sale_item_id: string;
+          product_id: string;
+          quantity: number;
+          return_type: "damaged" | "leaking" | "wrong_item" | "customer_return" | "expired";
+        };
+        Update: Partial<Database["public"]["Tables"]["sale_returns"]["Row"]>;
+        Relationships: [];
+      };
     };
-    Views: Record<string, never>;
+    Views: {
+      dsp_stock_balance: {
+        Row: { dsp_id: string; item_id: string; balance: number };
+        Relationships: [];
+      };
+      customer_empties_balance: {
+        Row: { customer_id: string; item_type: "canister_shell" | "crate"; balance: number };
+        Relationships: [];
+      };
+      dsp_empties_balance: {
+        Row: { dsp_id: string; item_type: "canister_shell" | "crate"; balance: number };
+        Relationships: [];
+      };
+      warehouse_empties_balance: {
+        Row: { warehouse_id: string; item_type: "canister_shell" | "crate"; balance: number };
+        Relationships: [];
+      };
+      dsp_stock_reconciliation: {
+        Row: {
+          dsp_id: string;
+          item_id: string;
+          ledger_balance: number;
+          last_physical_count: number | null;
+          last_count_date: string | null;
+          variance: number | null;
+        };
+        Relationships: [];
+      };
+    };
     Functions: {
       company_kpi_progress: {
         Args: { p_year?: number };
@@ -381,6 +583,59 @@ export interface Database {
       find_recent_similar_sales: {
         Args: { p_customer_id: string; p_total_amount: number; p_minutes?: number };
         Returns: { id: string; receipt_no: string; created_at: string }[];
+      };
+      create_stock_issuance: {
+        Args: {
+          p_dsp_id: string;
+          p_issue_date: string;
+          p_notes: string | null;
+          p_items: { item_id: string; quantity_issued: number; notes?: string }[];
+        };
+        Returns: string;
+      };
+      acknowledge_stock_issuance: {
+        Args: {
+          p_issuance_id: string;
+          p_received: { item_id: string; quantity_received: number }[];
+          p_dispute_reason?: string | null;
+        };
+        Returns: undefined;
+      };
+      record_empties_collection: {
+        Args: {
+          p_customer_id: string;
+          p_item_type: "canister_shell" | "crate";
+          p_quantity: number;
+          p_notes?: string | null;
+        };
+        Returns: undefined;
+      };
+      start_stock_count: {
+        Args: { p_scope: "dsp" | "warehouse"; p_scope_id: string; p_notes?: string | null };
+        Returns: string;
+      };
+      submit_stock_count: {
+        Args: {
+          p_count_id: string;
+          p_items: { item_id: string; counted_quantity: number; reason?: string; notes?: string }[];
+        };
+        Returns: undefined;
+      };
+      approve_stock_count: {
+        Args: { p_count_id: string };
+        Returns: undefined;
+      };
+      create_sale_return: {
+        Args: {
+          p_sale_item_id: string;
+          p_quantity: number;
+          p_return_type: "damaged" | "leaking" | "wrong_item" | "customer_return" | "expired";
+          p_restockable: boolean;
+          p_refund_amount: number;
+          p_return_date: string;
+          p_notes: string | null;
+        };
+        Returns: string;
       };
     };
     Enums: Record<string, never>;

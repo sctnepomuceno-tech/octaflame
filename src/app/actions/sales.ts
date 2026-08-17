@@ -110,17 +110,14 @@ export async function getCustomerSalesContext(
 
   if (!customer) return null;
 
-  const { data: sales } = await supabase
-    .from("sales")
-    .select("empties_variance")
+  const { data: balance } = await supabase
+    .from("customer_empties_balance")
+    .select("balance")
     .eq("customer_id", customerId)
-    .order("sale_date", { ascending: false })
-    .limit(20);
+    .eq("item_type", "canister_shell")
+    .maybeSingle();
 
-  const emptiesOwed = (sales ?? []).reduce(
-    (sum, s) => sum + Math.max(s.empties_variance, 0),
-    0
-  );
+  const emptiesOwed = Math.max(balance?.balance ?? 0, 0);
 
   return {
     totalTransactions: customer.total_transactions,

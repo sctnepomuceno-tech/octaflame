@@ -1,10 +1,13 @@
 import Link from "next/link";
+import { format as formatDate } from "date-fns";
 
 import { createClient } from "@/lib/supabase/server";
+import { getDspStockSummary } from "@/app/actions/stock";
 import { periodStartDate, todayDateString, daysAgoDateString, type Period } from "@/lib/dates";
 import { kgToMt } from "@/lib/volume/calculations";
 import { formatCount, formatCurrency, formatKg, formatMt, formatPercent } from "@/lib/volume/format";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 
@@ -48,6 +51,7 @@ export async function DspDashboard({
     { data: recentSales },
     { data: kpiRows },
     { data: ownYearSales },
+    stockSummary,
   ] = await Promise.all([
     supabase
       .from("sales")
@@ -74,6 +78,7 @@ export async function DspDashboard({
       .eq("dsp_id", dspId)
       .gte("sale_date", `${year}-01-01`)
       .lte("sale_date", today),
+    getDspStockSummary(dspId),
   ]);
 
   const sales = periodSales ?? [];
@@ -143,6 +148,49 @@ export async function DspDashboard({
           ))}
         </div>
       </div>
+
+      {/* Rolling stock widget — top of screen, always visible (§8.2) */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <CardTitle className="text-base">Your rolling stock</CardTitle>
+          <Button asChild variant="outline" size="sm">
+            <Link href="/stock/issuances">Issuances</Link>
+          </Button>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {stockSummary.stock.map((s) => (
+              <div key={s.itemName}>
+                <div className="text-xs text-muted-foreground">{s.itemName}</div>
+                <div className="text-lg font-semibold tabular-nums">{formatCount(s.balance)}</div>
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap items-center gap-4 border-t pt-3 text-sm">
+            <span className="text-muted-foreground">
+              Empties held:{" "}
+              <span className="font-medium text-foreground tabular-nums">
+                {formatCount(
+                  stockSummary.empties.find((e) => e.itemType === "canister_shell")?.balance ?? 0
+                )}{" "}
+                shells
+              </span>
+            </span>
+            {stockSummary.pendingIssuances.length > 0 ? (
+              <Badge variant="warning">
+                {stockSummary.pendingIssuances.length} pending issuance
+                {stockSummary.pendingIssuances.length === 1 ? "" : "s"}
+              </Badge>
+            ) : null}
+            <span className="text-muted-foreground">
+              Last count:{" "}
+              {stockSummary.lastCountDate
+                ? formatDate(new Date(stockSummary.lastCountDate), "MMM d, yyyy")
+                : "never"}
+            </span>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
