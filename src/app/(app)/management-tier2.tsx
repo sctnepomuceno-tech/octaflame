@@ -27,7 +27,7 @@ export async function ManagementTier2({ period }: { period: Period }) {
   const start = periodStartDate(period);
   const today = todayDateString();
 
-  const [{ data: sales }, { data: dsps }, { data: municipalities }, { data: customers }] =
+  const [{ data: sales }, { data: dsps }, { data: municipalities }, { data: customers }, { data: dspProfiles }, { data: tasks }] =
     await Promise.all([
       supabase
         .from("sales")
@@ -37,7 +37,11 @@ export async function ManagementTier2({ period }: { period: Period }) {
       supabase.from("dsps").select("id, name").eq("active", true).order("name"),
       supabase.from("municipalities").select("id, name, dsp_id").eq("active", true).order("name"),
       supabase.from("customers").select("id, first_purchase_date, dsp_id, customer_type"),
+      supabase.from("profiles").select("id, dsp_id").not("dsp_id", "is", null),
+      supabase.from("tasks").select("assigned_to, status, due_date, completed_at"),
     ]);
+
+  const dspIdByProfileId = new Map((dspProfiles ?? []).map((p) => [p.id, p.dsp_id as string]));
 
   const rows = sales ?? [];
   const totalAmount = rows.reduce((s, r) => s + r.total_amount, 0);
@@ -53,6 +57,8 @@ export async function ManagementTier2({ period }: { period: Period }) {
     newAccounts: number;
     transactions: number;
     repeat: number;
+    tasksCompleted: number;
+    tasksOverdue: number;
   }
 
   const dspAggById = new Map<string, DspAgg>();
@@ -66,6 +72,8 @@ export async function ManagementTier2({ period }: { period: Period }) {
       newAccounts: 0,
       transactions: 0,
       repeat: 0,
+      tasksCompleted: 0,
+      tasksOverdue: 0,
     });
   }
 
@@ -100,6 +108,21 @@ export async function ManagementTier2({ period }: { period: Period }) {
     ) {
       const agg = dspAggById.get(c.dsp_id);
       if (agg) agg.newAccounts += 1;
+    }
+  }
+
+  // Task completion is attributed to the assignee's own DSP, not the task's
+  // dsp_id (which reflects the creator's scope and can differ — §4.1 #4).
+  for (const t of tasks ?? []) {
+    const dspId = dspIdByProfileId.get(t.assigned_to);
+    if (!dspId) continue;
+    const agg = dspAggById.get(dspId);
+    if (!agg) continue;
+    if (t.status === "completed" && t.completed_at && t.completed_at >= start) {
+      agg.tasksCompleted += 1;
+    }
+    if ((t.status === "pending" || t.status === "in_progress") && t.due_date && t.due_date < today) {
+      agg.tasksOverdue += 1;
     }
   }
 
@@ -169,6 +192,8 @@ export async function ManagementTier2({ period }: { period: Period }) {
               <TableHead className="text-right">Accounts</TableHead>
               <TableHead className="text-right">New accounts</TableHead>
               <TableHead className="text-right">Repeat rate</TableHead>
+              <TableHead className="text-right">Tasks done</TableHead>
+              <TableHead className="text-right">Tasks overdue</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -181,6 +206,16 @@ export async function ManagementTier2({ period }: { period: Period }) {
                 <TableCell className="text-right tabular-nums">{dsp.newAccounts}</TableCell>
                 <TableCell className="text-right tabular-nums">
                   {formatPercent(dsp.transactions > 0 ? dsp.repeat / dsp.transactions : 0)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{dsp.tasksCompleted}</TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {dsp.tasksOverdue > 0 ? (
+                    <Badge variant="destructive" className="text-[10px]">
+                      {dsp.tasksOverdue}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground">0</span>
+                  )}
                 </TableCell>
               </TableRow>
             ))}

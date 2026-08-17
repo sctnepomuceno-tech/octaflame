@@ -604,6 +604,73 @@ export interface Database {
         Update: Partial<Database["public"]["Tables"]["collateral_movements"]["Row"]>;
         Relationships: [];
       };
+      task_types: {
+        Row: {
+          id: string;
+          name: string;
+          color: string;
+          sort_order: number;
+          active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["task_types"]["Row"]> & { name: string };
+        Update: Partial<Database["public"]["Tables"]["task_types"]["Row"]>;
+        Relationships: [];
+      };
+      tasks: {
+        Row: {
+          id: string;
+          title: string;
+          description: string | null;
+          task_type_id: string | null;
+          assigned_to: string;
+          assigned_by: string;
+          customer_id: string | null;
+          municipality_id: string | null;
+          dsp_id: string | null;
+          sale_id: string | null;
+          due_date: string | null;
+          due_time: string | null;
+          priority: "low" | "medium" | "high" | "urgent";
+          status: "pending" | "in_progress" | "completed" | "cancelled";
+          tags: string[];
+          completed_at: string | null;
+          completion_notes: string | null;
+          cancelled_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["tasks"]["Row"]> & {
+          title: string;
+          assigned_to: string;
+          assigned_by: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["tasks"]["Row"]>;
+        Relationships: [];
+      };
+      activity_log: {
+        Row: {
+          id: string;
+          customer_id: string;
+          activity_type: "customer_created" | "sale" | "task_created" | "task_completed" | "collateral_delivered" | "status_changed" | "note";
+          activity_date: string;
+          title: string;
+          description: string | null;
+          metadata: Record<string, unknown> | null;
+          reference_table: string | null;
+          reference_id: string | null;
+          created_by: string | null;
+          created_at: string;
+        };
+        Insert: Partial<Database["public"]["Tables"]["activity_log"]["Row"]> & {
+          customer_id: string;
+          activity_type: "customer_created" | "sale" | "task_created" | "task_completed" | "collateral_delivered" | "status_changed" | "note";
+          title: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["activity_log"]["Row"]>;
+        Relationships: [];
+      };
     };
     Views: {
       dsp_stock_balance: {

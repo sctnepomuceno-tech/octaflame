@@ -43,7 +43,12 @@ export default async function HomePage(props: {
             <SingleManagementBanner />
           </div>
         ) : null}
-        <DspDashboard dspId={profile.dsp_id} dspName={dsp?.name ?? "Your territory"} period={period} />
+        <DspDashboard
+          dspId={profile.dsp_id}
+          dspName={dsp?.name ?? "Your territory"}
+          userId={profile.id}
+          period={period}
+        />
       </>
     );
   }

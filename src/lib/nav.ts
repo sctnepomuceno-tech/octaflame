@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Home, ListChecks, Package, Plus, Receipt, Route, Truck, Users, UsersRound, Megaphone } from "lucide-react";
+import { Home, ListChecks, ListTodo, Package, Plus, Receipt, Route, Truck, Users, UsersRound, Megaphone } from "lucide-react";
 
 import { profileHasPermission, type PermissionKey, type Role } from "@/lib/permissions";
 
@@ -57,6 +57,17 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/sync-issues",
         icon: ListChecks,
         permission: "sales.create",
+      },
+    ],
+  },
+  {
+    label: "Follow-ups",
+    items: [
+      {
+        label: "Tasks",
+        href: "/tasks",
+        icon: ListTodo,
+        permission: ["tasks.read.own", "tasks.read.all"],
       },
     ],
   },

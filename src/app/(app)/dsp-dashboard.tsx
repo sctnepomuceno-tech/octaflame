@@ -1,15 +1,80 @@
 import Link from "next/link";
-import { format as formatDate } from "date-fns";
+import { format as formatDate, endOfWeek } from "date-fns";
+import { CalendarClock, CheckCircle2, Clock, ListTodo, TriangleAlert } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { getDspStockSummary } from "@/app/actions/stock";
-import { periodStartDate, todayDateString, daysAgoDateString, type Period } from "@/lib/dates";
+import {
+  periodStartDate,
+  todayDateString,
+  daysAgoDateString,
+  todayInManila,
+  type Period,
+} from "@/lib/dates";
 import { kgToMt } from "@/lib/volume/calculations";
 import { formatCount, formatCurrency, formatKg, formatMt, formatPercent } from "@/lib/volume/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
+import { TaskQuickComplete } from "./tasks/task-quick-complete";
+import type { Database } from "@/lib/supabase/database.types";
+
+type TaskWidgetRow = Pick<
+  Database["public"]["Tables"]["tasks"]["Row"],
+  "id" | "title" | "due_date" | "priority" | "status" | "customer_id"
+>;
+
+function TaskWidget({
+  title,
+  icon: Icon,
+  tasks,
+  quickComplete,
+  customerLabelById,
+}: {
+  title: string;
+  icon: typeof ListTodo;
+  tasks: TaskWidgetRow[];
+  quickComplete: boolean;
+  customerLabelById: Map<string, string>;
+}) {
+  return (
+    <Card className="p-4">
+      <CardContent className="flex flex-col gap-2 p-0">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Icon className="size-3.5" />
+          {title} · {tasks.length}
+        </div>
+        {tasks.length === 0 ? (
+          <p className="text-sm text-muted-foreground">Nothing here.</p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {tasks.slice(0, 4).map((t) => (
+              <div key={t.id} className="flex items-center gap-2 text-sm">
+                {quickComplete ? (
+                  <TaskQuickComplete taskId={t.id} completed={false} />
+                ) : (
+                  <CheckCircle2 className="size-4 shrink-0 text-muted-foreground/50" />
+                )}
+                <span className="truncate">
+                  {t.title}
+                  {t.customer_id && customerLabelById.get(t.customer_id) ? (
+                    <span className="text-muted-foreground"> · {customerLabelById.get(t.customer_id)}</span>
+                  ) : null}
+                </span>
+              </div>
+            ))}
+            {tasks.length > 4 ? (
+              <Link href="/tasks" className="text-xs text-muted-foreground hover:underline">
+                +{tasks.length - 4} more
+              </Link>
+            ) : null}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
 
 const PERIODS: { value: Period; label: string }[] = [
   { value: "today", label: "Today" },
@@ -33,16 +98,19 @@ function StatCard({ label, value, sub }: { label: string; value: string; sub?: s
 export async function DspDashboard({
   dspId,
   dspName,
+  userId,
   period,
 }: {
   dspId: string;
   dspName: string;
+  userId: string;
   period: Period;
 }) {
   const supabase = await createClient();
   const start = periodStartDate(period);
   const today = todayDateString();
   const heatmapStart = daysAgoDateString(29);
+  const weekEnd = formatDate(endOfWeek(todayInManila(), { weekStartsOn: 1 }), "yyyy-MM-dd");
   const year = new Date().getFullYear();
 
   const [
@@ -52,6 +120,8 @@ export async function DspDashboard({
     { data: kpiRows },
     { data: ownYearSales },
     stockSummary,
+    { data: openTasks },
+    { data: recentlyCompletedTasks },
   ] = await Promise.all([
     supabase
       .from("sales")
@@ -79,6 +149,19 @@ export async function DspDashboard({
       .gte("sale_date", `${year}-01-01`)
       .lte("sale_date", today),
     getDspStockSummary(dspId),
+    supabase
+      .from("tasks")
+      .select("id, title, due_date, priority, status, customer_id")
+      .eq("assigned_to", userId)
+      .in("status", ["pending", "in_progress"])
+      .order("due_date", { ascending: true, nullsFirst: false }),
+    supabase
+      .from("tasks")
+      .select("id, title, due_date, priority, status, customer_id")
+      .eq("assigned_to", userId)
+      .eq("status", "completed")
+      .order("completed_at", { ascending: false })
+      .limit(5),
   ]);
 
   const sales = periodSales ?? [];
@@ -107,6 +190,16 @@ export async function DspDashboard({
   const municipalityName = (municipalities ?? []).find((m) => m.id === topMunicipalityId)?.name;
   const customerLabel = (customers ?? []).find((c) => c.id === topCustomerId);
   const customerLabelById = new Map((customers ?? []).map((c) => [c.id, c.business_name || c.owner_name || "Customer"]));
+
+  // Overdue / Due this week / Upcoming are non-overlapping buckets so each
+  // task appears in exactly one widget (§8.2 lists them separately).
+  const openTaskRows = (openTasks ?? []) as TaskWidgetRow[];
+  const todaysTasks = openTaskRows.filter((t) => t.due_date === today);
+  const overdueTasks = openTaskRows.filter((t) => t.due_date !== null && t.due_date < today);
+  const dueThisWeekTasks = openTaskRows.filter(
+    (t) => t.due_date !== null && t.due_date > today && t.due_date <= weekEnd
+  );
+  const upcomingTasks = openTaskRows.filter((t) => t.due_date === null || t.due_date > weekEnd);
 
   const kpi = kpiRows?.[0];
   const ownVolumeKg = (ownYearSales ?? []).reduce((s, r) => s + r.total_volume_kg, 0);
@@ -191,6 +284,51 @@ export async function DspDashboard({
           </div>
         </CardContent>
       </Card>
+
+      {/* Task widgets (§8.2) */}
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-medium text-muted-foreground">Your tasks</h2>
+        <Link href="/tasks" className="text-xs text-muted-foreground hover:underline">
+          View all
+        </Link>
+      </div>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <TaskWidget
+          title="Today"
+          icon={ListTodo}
+          tasks={todaysTasks}
+          quickComplete
+          customerLabelById={customerLabelById}
+        />
+        <TaskWidget
+          title="Overdue"
+          icon={TriangleAlert}
+          tasks={overdueTasks}
+          quickComplete
+          customerLabelById={customerLabelById}
+        />
+        <TaskWidget
+          title="Due this week"
+          icon={Clock}
+          tasks={dueThisWeekTasks}
+          quickComplete
+          customerLabelById={customerLabelById}
+        />
+        <TaskWidget
+          title="Upcoming"
+          icon={CalendarClock}
+          tasks={upcomingTasks}
+          quickComplete
+          customerLabelById={customerLabelById}
+        />
+        <TaskWidget
+          title="Recently completed"
+          icon={CheckCircle2}
+          tasks={(recentlyCompletedTasks ?? []) as TaskWidgetRow[]}
+          quickComplete={false}
+          customerLabelById={customerLabelById}
+        />
+      </div>
 
       <Card>
         <CardHeader>

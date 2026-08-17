@@ -69,6 +69,7 @@ async function ExceptionsStrip() {
     { data: emptiesThreshold },
     { data: overOwedCustomers },
     { data: stockVarianceThreshold },
+    { count: overdueTaskCount },
   ] = await Promise.all([
     supabase.from("stock_issuances").select("id", { count: "exact", head: true }).eq("status", "pending"),
     supabase.from("dsps").select("id, name").eq("active", true),
@@ -76,6 +77,11 @@ async function ExceptionsStrip() {
     supabase.from("settings").select("value").eq("key", "empties_balance_notification_threshold").single(),
     supabase.from("customer_empties_balance").select("customer_id, balance").eq("item_type", "canister_shell"),
     supabase.from("settings").select("value").eq("key", "stock_variance_notification_threshold").single(),
+    supabase
+      .from("tasks")
+      .select("id", { count: "exact", head: true })
+      .in("status", ["pending", "in_progress"])
+      .lt("due_date", today),
   ]);
 
   const { data: reconciliation } = await supabase.from("dsp_stock_reconciliation").select("variance");
@@ -105,6 +111,7 @@ async function ExceptionsStrip() {
     { label: "Stock variances over threshold", count: variancesOverThreshold.length, href: "/stock/issuances" },
     { label: "Items below reorder", count: belowReorder.length, href: "/stock/issuances" },
     { label: "Customers owing empties", count: customersOverThreshold.length, href: "/customers" },
+    { label: "Overdue tasks", count: overdueTaskCount ?? 0, href: "/tasks" },
   ];
 
   const total = exceptions.reduce((sum, e) => sum + e.count, 0);
