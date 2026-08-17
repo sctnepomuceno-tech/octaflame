@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Home, Users } from "lucide-react";
+import { Home, Plus, Receipt, Users, UsersRound } from "lucide-react";
 
 import { profileHasPermission, type PermissionKey, type Role } from "@/lib/permissions";
 
@@ -7,13 +7,22 @@ export interface NavItem {
   label: string;
   href: string;
   icon: LucideIcon;
-  /** Visible to any active user when omitted. */
-  permission?: PermissionKey;
+  /** Visible to any active user when omitted. An array means "any of these". */
+  permission?: PermissionKey | PermissionKey[];
 }
 
 export interface NavSection {
   label: string | null;
   items: NavItem[];
+}
+
+function itemVisible(
+  profile: { role: Role; permissions: string[] },
+  item: NavItem
+): boolean {
+  if (!item.permission) return true;
+  const perms = Array.isArray(item.permission) ? item.permission : [item.permission];
+  return perms.some((p) => profileHasPermission(profile, p));
 }
 
 /**
@@ -25,6 +34,24 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: null,
     items: [{ label: "Home", href: "/", icon: Home }],
+  },
+  {
+    label: "Sales",
+    items: [
+      { label: "New sale", href: "/sales/new", icon: Plus, permission: "sales.create" },
+      {
+        label: "Customers",
+        href: "/customers",
+        icon: UsersRound,
+        permission: ["customers.read.own", "customers.read.all"],
+      },
+      {
+        label: "Sales",
+        href: "/sales",
+        icon: Receipt,
+        permission: ["sales.read.own", "sales.read.all"],
+      },
+    ],
   },
   {
     label: "Administration",
@@ -39,8 +66,6 @@ export function visibleNavSections(
 ): NavSection[] {
   return NAV_SECTIONS.map((section) => ({
     ...section,
-    items: section.items.filter(
-      (item) => !item.permission || profileHasPermission(profile, item.permission)
-    ),
+    items: section.items.filter((item) => itemVisible(profile, item)),
   })).filter((section) => section.items.length > 0);
 }

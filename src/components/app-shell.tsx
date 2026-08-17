@@ -35,7 +35,7 @@ export function AppShell({
   return (
     <div className="flex min-h-screen w-full bg-background">
       {/* Desktop sidebar */}
-      <aside className="hidden w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex">
+      <aside className="hidden w-64 shrink-0 flex-col border-r bg-sidebar text-sidebar-foreground md:flex print:hidden">
         <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-4">
           <div className="flex size-7 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground text-sm font-semibold">
             8
@@ -52,7 +52,7 @@ export function AppShell({
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile top bar */}
-        <header className="flex h-14 items-center gap-2 border-b bg-background px-4 md:hidden">
+        <header className="flex h-14 items-center gap-2 border-b bg-background px-4 md:hidden print:hidden">
           <Sheet open={mobileOpen} onOpenChange={setMobileOpen}>
             <Button
               variant="ghost"

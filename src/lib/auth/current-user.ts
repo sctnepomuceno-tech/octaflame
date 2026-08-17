@@ -56,3 +56,14 @@ export async function requirePermission(
   }
   return profile;
 }
+
+/** Like requirePermission, but passes if the profile holds any of the given permissions (e.g. edit.own OR edit.all). */
+export async function requireAnyPermission(
+  permissions: PermissionKey[]
+): Promise<Profile> {
+  const profile = await requireProfile();
+  if (!permissions.some((permission) => profileHasPermission(profile, permission))) {
+    redirect("/");
+  }
+  return profile;
+}
