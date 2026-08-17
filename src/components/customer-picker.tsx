@@ -5,6 +5,7 @@ import { Search, X } from "lucide-react";
 
 import { searchCustomers, type CustomerSearchResult } from "@/app/actions/sales";
 import { CustomerFormDialog, type MunicipalityOption } from "@/components/customer-form-dialog";
+import { offlineDb } from "@/lib/offline/db";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,17 @@ interface CustomerPickerProps {
   onChange: (customer: SelectedCustomer | null) => void;
 }
 
+function searchCached(customers: CustomerSearchResult[], query: string) {
+  if (!query.trim()) return customers.slice(0, 10);
+  const q = query.toLowerCase();
+  return customers
+    .filter(
+      (c) =>
+        c.business_name?.toLowerCase().includes(q) || c.owner_name?.toLowerCase().includes(q)
+    )
+    .slice(0, 10);
+}
+
 export function CustomerPicker({
   municipalities,
   defaultMunicipalityId,
@@ -41,8 +53,28 @@ export function CustomerPicker({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       startTransition(async () => {
-        const data = await searchCustomers(query);
-        setResults(data);
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          const cached = await offlineDb.getCachedCustomers();
+          setResults(
+            searchCached(
+              cached.map((c) => ({ ...c, latest_purchase_date: null })),
+              query
+            )
+          );
+          return;
+        }
+        try {
+          const data = await searchCustomers(query);
+          setResults(data);
+        } catch {
+          const cached = await offlineDb.getCachedCustomers();
+          setResults(
+            searchCached(
+              cached.map((c) => ({ ...c, latest_purchase_date: null })),
+              query
+            )
+          );
+        }
       });
     }, 200);
     return () => {
@@ -116,6 +148,7 @@ export function CustomerPicker({
             <CustomerFormDialog
               municipalities={municipalities}
               defaultMunicipalityId={defaultMunicipalityId}
+              allowOffline
               trigger={
                 <Button variant="ghost" size="sm" className="w-full justify-start">
                   + New customer

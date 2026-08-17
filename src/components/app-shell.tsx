@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/sheet";
 import { NavLinks } from "@/components/nav-links";
 import { UserMenu } from "@/components/user-menu";
+import { SyncIndicator } from "@/components/sync-indicator";
 
 interface AppShellProps {
   sections: NavSection[];
@@ -77,6 +78,9 @@ export function AppShell({
           <span className="font-semibold tracking-tight">Octaflame OS</span>
         </header>
 
+        <div className="print:hidden">
+          <SyncIndicator />
+        </div>
         <main className="flex-1 overflow-y-auto">{children}</main>
       </div>
     </div>

@@ -1,12 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { format } from "date-fns";
 import { Loader2, MessageSquarePlus, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 
-import { createSale, checkRecentSimilarSales, getCustomerSalesContext, type CustomerSalesContext } from "@/app/actions/sales";
+import { checkRecentSimilarSales, getCustomerSalesContext, type CustomerSalesContext } from "@/app/actions/sales";
 import {
   lineCanisters,
   lineVolumeKg,
@@ -19,6 +19,8 @@ import { formatCurrency, formatKg, formatMt, formatCount } from "@/lib/volume/fo
 import { CustomerPicker, type SelectedCustomer } from "@/components/customer-picker";
 import type { MunicipalityOption } from "@/components/customer-form-dialog";
 import { NumberStepper } from "@/components/number-stepper";
+import { offlineDb, type CachedCustomer } from "@/lib/offline/db";
+import { submitOrQueueSale } from "@/lib/offline/submit-sale";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -70,14 +72,36 @@ export function SalesEntryForm({
   municipalities,
   volumeConstants,
   defaultMunicipalityId,
+  offlineCustomers = [],
 }: {
   products: SalesProduct[];
   municipalities: MunicipalityOption[];
   volumeConstants: VolumeConstants;
   defaultMunicipalityId?: string;
+  offlineCustomers?: CachedCustomer[];
 }) {
   const router = useRouter();
   const [clientRef] = useState(() => crypto.randomUUID());
+
+  // Cache products and a recent-customer list for offline use the moment
+  // the form opens (§9.3) — a DSP losing signal mid-route still has what
+  // they need.
+  useEffect(() => {
+    offlineDb.cacheProducts(
+      products.map((p) => ({
+        id: p.id,
+        code: p.code,
+        name: p.name,
+        unit_price: p.unit_price,
+        unit_type: p.unit_type,
+        canisters_included: p.canisters_included,
+      }))
+    );
+    if (offlineCustomers.length > 0) {
+      offlineDb.cacheCustomers(offlineCustomers);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [customer, setCustomer] = useState<SelectedCustomer | null>(null);
   const [customerContext, setCustomerContext] = useState<CustomerSalesContext | null>(null);
@@ -95,14 +119,18 @@ export function SalesEntryForm({
 
   const [submitting, setSubmitting] = useState(false);
   const [confirmDuplicate, setConfirmDuplicate] = useState<{ label: string } | null>(null);
-  const [saved, setSaved] = useState<{ saleId: string; receiptNo?: string } | null>(null);
+  const [saved, setSaved] = useState<{ saleId: string | null; queued?: boolean } | null>(null);
 
   async function onSelectCustomer(next: SelectedCustomer | null) {
     setCustomer(next);
     setCustomerContext(null);
-    if (next) {
-      const ctx = await getCustomerSalesContext(next.id);
-      setCustomerContext(ctx);
+    if (next && typeof navigator !== "undefined" && navigator.onLine) {
+      try {
+        const ctx = await getCustomerSalesContext(next.id);
+        setCustomerContext(ctx);
+      } catch {
+        // Offline or flaky signal — the chip is a nice-to-have, not required to sell.
+      }
     }
   }
 
@@ -159,40 +187,51 @@ export function SalesEntryForm({
   async function doSubmit(skipDuplicateCheck = false) {
     if (!customer) return;
 
-    if (!skipDuplicateCheck) {
-      const similar = await checkRecentSimilarSales(customer.id, totalAmount);
-      if (similar.length > 0) {
-        setConfirmDuplicate({ label: customer.label });
-        return;
+    const offline = typeof navigator !== "undefined" && !navigator.onLine;
+
+    if (!skipDuplicateCheck && !offline) {
+      try {
+        const similar = await checkRecentSimilarSales(customer.id, totalAmount);
+        if (similar.length > 0) {
+          setConfirmDuplicate({ label: customer.label });
+          return;
+        }
+      } catch {
+        // Can't reach the server to check — fall through to submit, which
+        // will itself queue offline below.
       }
     }
 
     setSubmitting(true);
-    const result = await createSale({
-      clientRef,
-      customerId: customer.id,
-      saleDate,
-      deploymentDate: isHousehold ? undefined : deploymentDate,
-      paymentStatus,
-      amountPaid: effectiveAmountPaid,
-      emptiesCollected: effectiveEmptiesCollected,
-      cratesReturnedByCustomer: cratesReturned,
-      notes: notes || undefined,
-      lines: computedLines.map((l) => ({
-        productId: l.product.id,
-        qtyCrates: l.state.qtyCrates,
-        qtyCanisters: l.state.qtyCanisters,
-        qtySets: l.state.qtySets,
-        notes: l.state.notes || undefined,
-      })),
-    });
+    const outcome = await submitOrQueueSale(
+      {
+        clientRef,
+        customerId: customer.id,
+        saleDate,
+        deploymentDate: isHousehold ? undefined : deploymentDate,
+        paymentStatus,
+        amountPaid: effectiveAmountPaid,
+        emptiesCollected: effectiveEmptiesCollected,
+        cratesReturnedByCustomer: cratesReturned,
+        notes: notes || undefined,
+        lines: computedLines.map((l) => ({
+          productId: l.product.id,
+          qtyCrates: l.state.qtyCrates,
+          qtyCanisters: l.state.qtyCanisters,
+          qtySets: l.state.qtySets,
+          notes: l.state.notes || undefined,
+        })),
+      },
+      customer.label,
+      totalAmount
+    );
     setSubmitting(false);
 
-    if (result.error) {
-      toast.error(result.error);
+    if (outcome.error) {
+      toast.error(outcome.error);
       return;
     }
-    setSaved({ saleId: result.saleId! });
+    setSaved({ saleId: outcome.saleId, queued: outcome.queued });
   }
 
   function resetForNewSale(keepCustomer: boolean) {
@@ -216,16 +255,25 @@ export function SalesEntryForm({
   if (saved) {
     return (
       <div className="mx-auto flex max-w-lg flex-col items-center gap-4 p-8 text-center">
-        <div className="flex size-14 items-center justify-center rounded-full bg-success/10 text-success text-2xl">
-          ✓
+        <div
+          className={cn(
+            "flex size-14 items-center justify-center rounded-full text-2xl",
+            saved.queued ? "bg-warning/10 text-warning" : "bg-success/10 text-success"
+          )}
+        >
+          {saved.queued ? "⏳" : "✓"}
         </div>
-        <h2 className="text-lg font-semibold">Sale recorded</h2>
+        <h2 className="text-lg font-semibold">
+          {saved.queued ? "Saved offline — will sync when back online" : "Sale recorded"}
+        </h2>
         <p className="text-muted-foreground">{formatCurrency(totalAmount)} · {formatKg(totalVolumeKg)}</p>
         <div className="flex w-full flex-col gap-2">
           <Button onClick={() => resetForNewSale(true)}>Log another sale in this municipality</Button>
-          <Button variant="outline" onClick={() => router.push(`/sales/${saved.saleId}`)}>
-            Send receipt
-          </Button>
+          {saved.saleId ? (
+            <Button variant="outline" onClick={() => router.push(`/sales/${saved.saleId}`)}>
+              Send receipt
+            </Button>
+          ) : null}
           <Button variant="ghost" onClick={() => router.push("/sales")}>
             Done
           </Button>

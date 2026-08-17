@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Home, Package, Plus, Receipt, Truck, Users, UsersRound, Megaphone } from "lucide-react";
+import { Home, ListChecks, Package, Plus, Receipt, Route, Truck, Users, UsersRound, Megaphone } from "lucide-react";
 
 import { profileHasPermission, type PermissionKey, type Role } from "@/lib/permissions";
 
@@ -39,6 +39,7 @@ export const NAV_SECTIONS: NavSection[] = [
     label: "Sales",
     items: [
       { label: "New sale", href: "/sales/new", icon: Plus, permission: "sales.create" },
+      { label: "Route mode", href: "/sales/route-mode", icon: Route, permission: "sales.create" },
       {
         label: "Customers",
         href: "/customers",
@@ -50,6 +51,12 @@ export const NAV_SECTIONS: NavSection[] = [
         href: "/sales",
         icon: Receipt,
         permission: ["sales.read.own", "sales.read.all"],
+      },
+      {
+        label: "Sync issues",
+        href: "/sync-issues",
+        icon: ListChecks,
+        permission: "sales.create",
       },
     ],
   },

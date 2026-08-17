@@ -3,11 +3,11 @@ import type { Metadata } from "next";
 import { requirePermission } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { getVolumeConstants } from "@/lib/volume";
-import { SalesEntryForm } from "@/components/sales-entry-form";
+import { RouteModeForm } from "@/components/route-mode-form";
 
-export const metadata: Metadata = { title: "New sale" };
+export const metadata: Metadata = { title: "Route mode" };
 
-export default async function NewSalePage() {
+export default async function RouteModePage() {
   const profile = await requirePermission("sales.create");
   const supabase = await createClient();
 
@@ -20,7 +20,6 @@ export default async function NewSalePage() {
         .order("sort_order"),
       supabase.from("municipalities").select("id, name, dsp_id").eq("active", true).order("name"),
       getVolumeConstants(),
-      // Cached client-side for offline search (§9.3) — capped, not the full book of business.
       supabase
         .from("customers")
         .select("id, business_name, owner_name, customer_type, municipality_id")
@@ -34,7 +33,7 @@ export default async function NewSalePage() {
       : undefined;
 
   return (
-    <SalesEntryForm
+    <RouteModeForm
       products={products ?? []}
       municipalities={municipalities ?? []}
       volumeConstants={volumeConstants}

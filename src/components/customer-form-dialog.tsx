@@ -8,6 +8,7 @@ import { toast } from "sonner";
 
 import { createCustomer, updateCustomer, findSimilarCustomers, type SimilarCustomer } from "@/app/actions/customers";
 import { customerFormSchema, type CustomerFormInput } from "@/lib/validation/customers";
+import { offlineDb } from "@/lib/offline/db";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,6 +63,8 @@ interface CustomerFormDialogProps {
   /** Supplying this switches the dialog to edit mode for an existing customer. */
   editCustomer?: { id: string } & CustomerFormInput;
   onUpdated?: () => void;
+  /** When true, a new customer queues to the offline store instead of failing if there's no signal (§9.3). */
+  allowOffline?: boolean;
 }
 
 export function CustomerFormDialog({
@@ -71,6 +74,7 @@ export function CustomerFormDialog({
   onCreated,
   editCustomer,
   onUpdated,
+  allowOffline,
 }: CustomerFormDialogProps) {
   const isEditing = !!editCustomer;
   const [open, setOpen] = useState(false);
@@ -98,37 +102,78 @@ export function CustomerFormDialog({
 
   async function checkDuplicates() {
     if (isEditing) return;
+    if (typeof navigator !== "undefined" && !navigator.onLine) return;
     const name = businessName || ownerName || "";
     if (!name.trim() || !municipalityId) return;
-    const matches = await findSimilarCustomers(name, municipalityId);
+    const matches = await findSimilarCustomers(name, municipalityId).catch(() => []);
     setDuplicates(matches);
     setAcknowledgedDuplicates(false);
   }
 
   const onSubmit = (data: CustomerFormInput) => {
     setServerError(null);
+    const label = data.businessName || data.ownerName || "Customer";
+
     startTransition(async () => {
-      const result = isEditing
-        ? await updateCustomer(editCustomer.id, data)
-        : await createCustomer(data);
-      if (result.error) {
-        setServerError(result.error);
+      if (!isEditing && allowOffline && typeof navigator !== "undefined" && !navigator.onLine) {
+        await queueOfflineCustomer(data, label);
         return;
       }
-      const label = data.businessName || data.ownerName || "Customer";
-      toast.success(isEditing ? `${label} updated.` : `${label} added.`);
-      if (!isEditing && "data" in result && result.data) {
-        onCreated?.({ ...data, id: result.data.id, label });
+
+      try {
+        const result = isEditing
+          ? await updateCustomer(editCustomer.id, data)
+          : await createCustomer(data);
+
+        if (result.error) {
+          setServerError(result.error);
+          return;
+        }
+        toast.success(isEditing ? `${label} updated.` : `${label} added.`);
+        if (!isEditing && "data" in result && result.data) {
+          onCreated?.({ ...data, id: result.data.id, label });
+        }
+        if (isEditing) {
+          onUpdated?.();
+        } else {
+          reset({ ...defaultValues, municipalityId: defaultMunicipalityId ?? "" });
+        }
+        setDuplicates([]);
+        setOpen(false);
+      } catch (err) {
+        // A network failure while "online" (flaky signal) falls back the
+        // same way an already-offline submit does (§9.3).
+        if (!isEditing && allowOffline) {
+          await queueOfflineCustomer(data, label);
+          return;
+        }
+        setServerError(err instanceof Error ? err.message : "Failed to save customer.");
       }
-      if (isEditing) {
-        onUpdated?.();
-      } else {
-        reset({ ...defaultValues, municipalityId: defaultMunicipalityId ?? "" });
-      }
-      setDuplicates([]);
-      setOpen(false);
     });
   };
+
+  async function queueOfflineCustomer(data: CustomerFormInput, label: string) {
+    const id = crypto.randomUUID();
+    await offlineDb.addPendingCustomer({
+      id,
+      businessName: data.businessName,
+      ownerName: data.ownerName,
+      contactNumber: data.contactNumber,
+      customerType: data.customerType,
+      municipalityId: data.municipalityId,
+      barangay: data.barangay,
+      address: data.address,
+      landmark: data.landmark,
+      notes: data.notes,
+      status: "pending",
+      queuedAt: new Date().toISOString(),
+    });
+    toast.success(`${label} saved offline — will sync when back online.`);
+    onCreated?.({ ...data, id, label });
+    reset({ ...defaultValues, municipalityId: defaultMunicipalityId ?? "" });
+    setDuplicates([]);
+    setOpen(false);
+  }
 
   return (
     <Dialog

@@ -127,3 +127,39 @@ export async function getCustomerSalesContext(
     emptiesOwed,
   };
 }
+
+export interface LastOrderLine {
+  productId: string;
+  qtyCrates: number;
+  qtyCanisters: number;
+  qtySets: number;
+}
+
+/** "Repeat last order" (§9.4) — pre-fills from the customer's previous purchase. */
+export async function getLastOrderLines(customerId: string): Promise<LastOrderLine[]> {
+  await requirePermission("sales.create");
+  const supabase = await createClient();
+
+  const { data: lastSale } = await supabase
+    .from("sales")
+    .select("id")
+    .eq("customer_id", customerId)
+    .order("sale_date", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!lastSale) return [];
+
+  const { data: items } = await supabase
+    .from("sale_items")
+    .select("product_id, qty_crates, qty_canisters, qty_sets")
+    .eq("sale_id", lastSale.id);
+
+  return (items ?? []).map((i) => ({
+    productId: i.product_id,
+    qtyCrates: i.qty_crates,
+    qtyCanisters: i.qty_canisters,
+    qtySets: i.qty_sets,
+  }));
+}
