@@ -18,12 +18,16 @@ import { SyncIndicator } from "@/components/sync-indicator";
 import { NotificationBell } from "@/components/notification-bell";
 import { CommandPalette } from "@/components/command-palette";
 import { PageTransition } from "@/components/motion/page-transition";
+import { RoleSwitcher } from "@/components/role-switcher";
+import { PreviewBanner } from "@/components/preview-banner";
 
 interface AppShellProps {
   sections: NavSection[];
   fullName: string;
   email: string;
   role: Role;
+  isManagement: boolean;
+  previewRole: Role | null;
   children: React.ReactNode;
 }
 
@@ -32,6 +36,8 @@ export function AppShell({
   fullName,
   email,
   role,
+  isManagement,
+  previewRole,
   children,
 }: AppShellProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -60,6 +66,11 @@ export function AppShell({
         <div className="flex-1 overflow-y-auto p-3">
           <NavLinks sections={sections} />
         </div>
+        {isManagement ? (
+          <div className="border-t border-sidebar-border p-2">
+            <RoleSwitcher previewRole={previewRole} />
+          </div>
+        ) : null}
         <div className="flex items-center gap-1 border-t border-sidebar-border p-2">
           <div className="min-w-0 flex-1">
             <UserMenu fullName={fullName} email={email} role={role} />
@@ -87,6 +98,11 @@ export function AppShell({
               <div className="flex-1 overflow-y-auto px-3">
                 <NavLinks sections={sections} onNavigate={() => setMobileOpen(false)} />
               </div>
+              {isManagement ? (
+                <div className="border-t border-sidebar-border p-2">
+                  <RoleSwitcher previewRole={previewRole} />
+                </div>
+              ) : null}
               <div className="border-t border-sidebar-border p-2">
                 <UserMenu fullName={fullName} email={email} role={role} />
               </div>
@@ -104,6 +120,7 @@ export function AppShell({
           <NotificationBell />
         </header>
 
+        {previewRole ? <PreviewBanner previewRole={previewRole} /> : null}
         <div className="print:hidden">
           <SyncIndicator />
         </div>

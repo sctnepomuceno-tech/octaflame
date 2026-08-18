@@ -2,7 +2,8 @@ import Link from "next/link";
 import { TriangleAlert } from "lucide-react";
 
 import { requireProfile, profileHasPermission } from "@/lib/auth/current-user";
-import { ROLE_LABELS } from "@/lib/permissions";
+import { getViewAsRole } from "@/lib/auth/view-as";
+import { ROLE_LABELS, defaultPermissionsForRole } from "@/lib/permissions";
 import { createClient } from "@/lib/supabase/server";
 import type { Period } from "@/lib/dates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -24,8 +25,13 @@ export default async function HomePage(props: {
 
   const supabase = await createClient();
 
+  const previewRole = profile.role === "management" ? await getViewAsRole() : null;
+  const displayProfile = previewRole
+    ? { role: previewRole, permissions: defaultPermissionsForRole(previewRole) }
+    : profile;
+
   let singleManagementAccount = false;
-  if (profileHasPermission(profile, "users.manage")) {
+  if (!previewRole && profileHasPermission(profile, "users.manage")) {
     const { count } = await supabase
       .from("profiles")
       .select("id", { count: "exact", head: true })
@@ -34,26 +40,36 @@ export default async function HomePage(props: {
     singleManagementAccount = (count ?? 0) <= 1;
   }
 
-  if (profile.role === "dsp" && profile.dsp_id) {
-    const { data: dsp } = await supabase.from("dsps").select("name").eq("id", profile.dsp_id).single();
-    return (
-      <>
-        {singleManagementAccount ? (
-          <div className="mx-auto max-w-5xl p-6 pb-0">
-            <SingleManagementBanner />
-          </div>
-        ) : null}
-        <DspDashboard
-          dspId={profile.dsp_id}
-          dspName={dsp?.name ?? "Your territory"}
-          userId={profile.id}
-          period={period}
-        />
-      </>
-    );
+  if (displayProfile.role === "dsp") {
+    // Previewing as DSP: Management has no dsp_id of their own, so preview
+    // against the first active territory instead of showing nothing.
+    const dspId = previewRole ? null : profile.dsp_id;
+    const { data: previewDsp } = previewRole
+      ? await supabase.from("dsps").select("id, name").eq("active", true).order("name").limit(1).maybeSingle()
+      : { data: null };
+    const resolvedDspId = dspId ?? previewDsp?.id ?? null;
+
+    if (resolvedDspId) {
+      const { data: dsp } = await supabase.from("dsps").select("name").eq("id", resolvedDspId).single();
+      return (
+        <>
+          {singleManagementAccount ? (
+            <div className="mx-auto max-w-5xl p-6 pb-0">
+              <SingleManagementBanner />
+            </div>
+          ) : null}
+          <DspDashboard
+            dspId={resolvedDspId}
+            dspName={dsp?.name ?? "Your territory"}
+            userId={profile.id}
+            period={period}
+          />
+        </>
+      );
+    }
   }
 
-  if (profileHasPermission(profile, "dashboard.management")) {
+  if (profileHasPermission(displayProfile, "dashboard.management")) {
     return (
       <>
         {singleManagementAccount ? (
@@ -66,11 +82,11 @@ export default async function HomePage(props: {
     );
   }
 
-  if (profileHasPermission(profile, "dashboard.warehouse")) {
+  if (profileHasPermission(displayProfile, "dashboard.warehouse")) {
     return <WarehouseDashboard />;
   }
 
-  if (profileHasPermission(profile, "dashboard.office")) {
+  if (profileHasPermission(displayProfile, "dashboard.office")) {
     return <OfficeDashboard />;
   }
 
@@ -85,7 +101,7 @@ export default async function HomePage(props: {
         <CardContent className="flex flex-col gap-2 text-sm text-muted-foreground">
           <p>
             Signed in as <span className="text-foreground">{profile.email}</span>{" "}
-            with the <span className="text-foreground">{ROLE_LABELS[profile.role]}</span> role.
+            with the <span className="text-foreground">{ROLE_LABELS[displayProfile.role]}</span> role.
           </p>
           <p>
             The Management, Warehouse, and Office dashboards arrive in later
