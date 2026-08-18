@@ -1,12 +1,35 @@
-import type { LucideIcon } from "lucide-react";
-import { BarChart3, Bell, CalendarCheck, FileDown, History, Home, ListChecks, ListTodo, MapPin, Package, PackageSearch, Plus, Receipt, Route, Truck, Users, UsersRound, Megaphone } from "lucide-react";
-
 import { profileHasPermission, type PermissionKey, type Role } from "@/lib/permissions";
+
+export const NAV_ICON_KEYS = [
+  "home",
+  "plus",
+  "route",
+  "usersRound",
+  "receipt",
+  "listChecks",
+  "listTodo",
+  "package",
+  "truck",
+  "megaphone",
+  "fileDown",
+  "barChart3",
+  "users",
+  "mapPin",
+  "packageSearch",
+  "calendarCheck",
+  "history",
+  "bell",
+] as const;
+
+export type NavIconKey = (typeof NAV_ICON_KEYS)[number];
 
 export interface NavItem {
   label: string;
   href: string;
-  icon: LucideIcon;
+  // A component reference (e.g. a Lucide icon function) isn't serializable
+  // across the server/client boundary, so nav sections carry a key instead —
+  // nav-links.tsx (a Client Component) owns the key -> icon component map.
+  icon: NavIconKey;
   /** Visible to any active user when omitted. An array means "any of these". */
   permission?: PermissionKey | PermissionKey[];
 }
@@ -33,29 +56,29 @@ function itemVisible(
 export const NAV_SECTIONS: NavSection[] = [
   {
     label: null,
-    items: [{ label: "Home", href: "/", icon: Home }],
+    items: [{ label: "Home", href: "/", icon: "home" }],
   },
   {
     label: "Sales",
     items: [
-      { label: "New sale", href: "/sales/new", icon: Plus, permission: "sales.create" },
-      { label: "Route mode", href: "/sales/route-mode", icon: Route, permission: "sales.create" },
+      { label: "New sale", href: "/sales/new", icon: "plus", permission: "sales.create" },
+      { label: "Route mode", href: "/sales/route-mode", icon: "route", permission: "sales.create" },
       {
         label: "Customers",
         href: "/customers",
-        icon: UsersRound,
+        icon: "usersRound",
         permission: ["customers.read.own", "customers.read.all"],
       },
       {
         label: "Sales",
         href: "/sales",
-        icon: Receipt,
+        icon: "receipt",
         permission: ["sales.read.own", "sales.read.all"],
       },
       {
         label: "Sync issues",
         href: "/sync-issues",
-        icon: ListChecks,
+        icon: "listChecks",
         permission: "sales.create",
       },
     ],
@@ -66,7 +89,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         label: "Tasks",
         href: "/tasks",
-        icon: ListTodo,
+        icon: "listTodo",
         permission: ["tasks.read.own", "tasks.read.all"],
       },
     ],
@@ -77,13 +100,13 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         label: "Stock issuances",
         href: "/stock/issuances",
-        icon: Package,
+        icon: "package",
         permission: ["warehouse.read", "warehouse.create"],
       },
       {
         label: "Truck reports",
         href: "/warehouse/truck-reports",
-        icon: Truck,
+        icon: "truck",
         permission: ["truck.read", "truck.create"],
       },
     ],
@@ -94,7 +117,7 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         label: "Collateral",
         href: "/office/collateral",
-        icon: Megaphone,
+        icon: "megaphone",
         permission: ["office.read", "office.create"],
       },
     ],
@@ -105,13 +128,13 @@ export const NAV_SECTIONS: NavSection[] = [
       {
         label: "Reports",
         href: "/reports",
-        icon: FileDown,
+        icon: "fileDown",
         permission: ["reports.read.own", "reports.read.all"],
       },
       {
         label: "Analytics",
         href: "/analytics",
-        icon: BarChart3,
+        icon: "barChart3",
         permission: "dashboard.management",
       },
     ],
@@ -119,12 +142,12 @@ export const NAV_SECTIONS: NavSection[] = [
   {
     label: "Administration",
     items: [
-      { label: "Users", href: "/settings/users", icon: Users, permission: "users.manage" },
-      { label: "Territories", href: "/settings/territories", icon: MapPin, permission: "settings.manage" },
-      { label: "Products", href: "/settings/products", icon: PackageSearch, permission: "products.manage" },
-      { label: "Periods", href: "/settings/periods", icon: CalendarCheck, permission: "settings.manage" },
-      { label: "Audit log", href: "/settings/audit-log", icon: History, permission: "audit.read" },
-      { label: "Notifications", href: "/settings/notifications", icon: Bell, permission: "notifications.manage" },
+      { label: "Users", href: "/settings/users", icon: "users", permission: "users.manage" },
+      { label: "Territories", href: "/settings/territories", icon: "mapPin", permission: "settings.manage" },
+      { label: "Products", href: "/settings/products", icon: "packageSearch", permission: "products.manage" },
+      { label: "Periods", href: "/settings/periods", icon: "calendarCheck", permission: "settings.manage" },
+      { label: "Audit log", href: "/settings/audit-log", icon: "history", permission: "audit.read" },
+      { label: "Notifications", href: "/settings/notifications", icon: "bell", permission: "notifications.manage" },
     ],
   },
 ];

@@ -2,9 +2,51 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import {
+  BarChart3,
+  Bell,
+  CalendarCheck,
+  FileDown,
+  History,
+  Home,
+  ListChecks,
+  ListTodo,
+  MapPin,
+  Package,
+  PackageSearch,
+  Plus,
+  Receipt,
+  Route,
+  Truck,
+  Users,
+  UsersRound,
+  Megaphone,
+  type LucideIcon,
+} from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import type { NavSection } from "@/lib/nav";
+import type { NavIconKey, NavSection } from "@/lib/nav";
+
+const ICONS: Record<NavIconKey, LucideIcon> = {
+  home: Home,
+  plus: Plus,
+  route: Route,
+  usersRound: UsersRound,
+  receipt: Receipt,
+  listChecks: ListChecks,
+  listTodo: ListTodo,
+  package: Package,
+  truck: Truck,
+  megaphone: Megaphone,
+  fileDown: FileDown,
+  barChart3: BarChart3,
+  users: Users,
+  mapPin: MapPin,
+  packageSearch: PackageSearch,
+  calendarCheck: CalendarCheck,
+  history: History,
+  bell: Bell,
+};
 
 export function NavLinks({
   sections,
@@ -27,7 +69,7 @@ export function NavLinks({
           {section.items.map((item) => {
             const active =
               item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
-            const Icon = item.icon;
+            const Icon = ICONS[item.icon];
             return (
               <Link
                 key={item.href}
