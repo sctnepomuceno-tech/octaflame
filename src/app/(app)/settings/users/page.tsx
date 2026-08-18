@@ -17,8 +17,8 @@ import {
 } from "@/components/ui/table";
 import { InviteUserDialog } from "./invite-user-dialog";
 import { InvitationActions } from "./invitation-actions";
-import { ReinviteButton } from "./reinvite-button";
 import { ReactivateButton } from "./[id]/reactivate-button";
+import { DeleteUserDialog } from "./delete-user-dialog";
 
 export const metadata: Metadata = { title: "Users" };
 
@@ -135,10 +135,11 @@ export default async function UsersPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {profile.must_change_password ? (
-                        <ReinviteButton userId={profile.id} variant="ghost" />
-                      ) : !profile.active ? (
-                        <ReactivateButton userId={profile.id} variant="ghost" />
+                      {!profile.active ? (
+                        <>
+                          <ReactivateButton userId={profile.id} variant="ghost" />
+                          <DeleteUserDialog userId={profile.id} userName={profile.full_name} />
+                        </>
                       ) : null}
                     </div>
                   </TableCell>

@@ -12,7 +12,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EditUserForm } from "./edit-user-form";
 import { DeactivateUserDialog } from "./deactivate-user-dialog";
 import { ReactivateButton } from "./reactivate-button";
-import { ReinviteButton } from "../reinvite-button";
+import { DeleteUserDialog } from "../delete-user-dialog";
 
 export const metadata: Metadata = { title: "User" };
 
@@ -55,12 +55,14 @@ export default async function UserDetailPage(props: { params: Promise<{ id: stri
             <p className="text-sm text-muted-foreground">{target.email}</p>
           </div>
           <div className="flex items-center gap-2">
-            {target.must_change_password ? <ReinviteButton userId={target.id} /> : null}
             {target.active ? (
               <DeactivateUserDialog userId={target.id} userName={target.full_name} isDsp={target.role === "dsp"} />
-            ) : !target.must_change_password ? (
-              <ReactivateButton userId={target.id} />
-            ) : null}
+            ) : (
+              <>
+                <ReactivateButton userId={target.id} />
+                <DeleteUserDialog userId={target.id} userName={target.full_name} />
+              </>
+            )}
           </div>
         </div>
       </div>

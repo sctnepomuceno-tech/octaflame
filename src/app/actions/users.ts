@@ -449,84 +449,54 @@ export async function reactivateUser(userId: string): Promise<ActionResult> {
 }
 
 /**
- * Reactivates (if needed) and resends a fresh invite email for a user who
- * never completed first-login setup (§5.6) — covers both a still-active
- * "Invited" user whose link expired and a deactivated one whose original
- * user_invitations row is no longer 'pending' (e.g. it was revoked). Not
- * valid once the user has set their own password: at that point access is
- * restored with Reactivate alone, not a fresh invite link.
+ * Permanently removes a deactivated user so their email can be invited
+ * fresh. Only allowed once deactivated — Supabase's inviteUserByEmail
+ * refuses to resend to an email that already has any auth.users record
+ * (confirmed or not), so a stuck invite has no "resend" path, only this
+ * one: delete and re-invite from scratch.
+ *
+ * Deleting the auth user cascades to the profiles row (profiles_id_fkey
+ * ON DELETE CASCADE), but every other table that references profiles(id)
+ * (sales.created_by, tasks.assigned_to, audit_log.user_id, ...) does so
+ * with no cascade — so this fails safely (nothing is deleted) the moment
+ * the user has any real history, which is exactly when they should stay
+ * deactivated instead.
  */
-export async function reinviteUser(userId: string): Promise<ActionResult> {
+export async function deleteDeactivatedUser(userId: string): Promise<ActionResult> {
   const actingProfile = await requirePermission("users.manage");
   const admin = createAdminClient();
 
   const { data: target, error: fetchError } = await admin
     .from("profiles")
-    .select("id, email, full_name, role, active, must_change_password")
+    .select("id, email, full_name, active")
     .eq("id", userId)
     .single();
   if (fetchError || !target) {
     return { error: "User not found." };
   }
-  if (!target.must_change_password) {
-    return { error: "This user already has their own password — reactivate instead." };
+  if (target.active) {
+    return { error: "Only deactivated users can be deleted. Deactivate them first." };
   }
 
-  if (!target.active) {
-    const { error: reactivateError } = await admin
-      .from("profiles")
-      .update({ active: true, deactivated_at: null, deactivated_by: null })
-      .eq("id", userId);
-    if (reactivateError) {
-      if (reactivateError.message.includes("profiles_dsp_id_active_uniq")) {
-        return { error: "That DSP territory is already assigned to another active user. Reassign the territory first." };
-      }
-      return { error: reactivateError.message };
-    }
+  const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
+  if (deleteError) {
+    return {
+      error:
+        "This user has activity history (sales, tasks, or other records) tied to their account and can't be deleted — keep them deactivated instead.",
+    };
   }
 
-  const siteUrl = await getSiteUrl();
-  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(target.email, {
-    redirectTo: `${siteUrl}/auth/callback`,
-  });
-  if (inviteError) {
-    return { error: inviteError.message };
-  }
-
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-  const { data: existingInvitation } = await admin
-    .from("user_invitations")
-    .select("id")
-    .ilike("email", target.email)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (existingInvitation) {
-    await admin
-      .from("user_invitations")
-      .update({ status: "pending", expires_at: expiresAt })
-      .eq("id", existingInvitation.id);
-  } else {
-    await admin.from("user_invitations").insert({
-      email: target.email,
-      full_name: target.full_name,
-      role: target.role,
-      invited_by: actingProfile.id,
-      status: "pending",
-      expires_at: expiresAt,
-    });
-  }
+  await admin.from("user_invitations").delete().ilike("email", target.email);
 
   await admin.from("audit_log").insert({
     user_id: actingProfile.id,
-    action: "user.reinvited",
+    action: "user.deleted",
     table_name: "profiles",
     record_id: userId,
+    previous_value: { full_name: target.full_name, email: target.email },
   });
 
   revalidatePath("/settings/users");
-  revalidatePath(`/settings/users/${userId}`);
   return { success: true };
 }
 
