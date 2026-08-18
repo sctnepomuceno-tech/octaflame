@@ -19,6 +19,7 @@ import { InviteUserDialog } from "./invite-user-dialog";
 import { InvitationActions } from "./invitation-actions";
 import { ReactivateButton } from "./[id]/reactivate-button";
 import { DeleteUserDialog } from "./delete-user-dialog";
+import { CancelInviteButton } from "./cancel-invite-button";
 
 export const metadata: Metadata = { title: "Users" };
 
@@ -140,6 +141,8 @@ export default async function UsersPage() {
                           <ReactivateButton userId={profile.id} variant="ghost" />
                           <DeleteUserDialog userId={profile.id} userName={profile.full_name} />
                         </>
+                      ) : profile.must_change_password ? (
+                        <CancelInviteButton userId={profile.id} variant="ghost" />
                       ) : null}
                     </div>
                   </TableCell>

@@ -13,6 +13,7 @@ import { EditUserForm } from "./edit-user-form";
 import { DeactivateUserDialog } from "./deactivate-user-dialog";
 import { ReactivateButton } from "./reactivate-button";
 import { DeleteUserDialog } from "../delete-user-dialog";
+import { CancelInviteButton } from "../cancel-invite-button";
 
 export const metadata: Metadata = { title: "User" };
 
@@ -56,7 +57,11 @@ export default async function UserDetailPage(props: { params: Promise<{ id: stri
           </div>
           <div className="flex items-center gap-2">
             {target.active ? (
-              <DeactivateUserDialog userId={target.id} userName={target.full_name} isDsp={target.role === "dsp"} />
+              target.must_change_password ? (
+                <CancelInviteButton userId={target.id} />
+              ) : (
+                <DeactivateUserDialog userId={target.id} userName={target.full_name} isDsp={target.role === "dsp"} />
+              )
             ) : (
               <>
                 <ReactivateButton userId={target.id} />

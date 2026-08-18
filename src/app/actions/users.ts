@@ -228,6 +228,63 @@ export async function revokeInvitation(invitationId: string): Promise<ActionResu
   return { success: true };
 }
 
+/**
+ * Cancels an in-flight invite from the user's row directly (§5.6), rather
+ * than requiring the admin find the matching row in the separate Pending
+ * invitations list. Same effect as revokeInvitation, keyed by user instead
+ * of invitation id: marks the pending user_invitations row 'revoked' and
+ * deactivates the profile so it isn't left open.
+ */
+export async function cancelInviteForUser(userId: string): Promise<ActionResult> {
+  const actingProfile = await requirePermission("users.manage");
+  const admin = createAdminClient();
+
+  const { data: target, error: fetchError } = await admin
+    .from("profiles")
+    .select("id, email, active, must_change_password")
+    .eq("id", userId)
+    .single();
+  if (fetchError || !target) {
+    return { error: "User not found." };
+  }
+  if (!target.must_change_password) {
+    return { error: "This user already completed setup — deactivate instead." };
+  }
+  if (!target.active) {
+    return { error: "This user is already deactivated." };
+  }
+
+  const { data: invitation } = await admin
+    .from("user_invitations")
+    .select("id")
+    .eq("status", "pending")
+    .ilike("email", target.email)
+    .maybeSingle();
+
+  if (invitation) {
+    await admin.from("user_invitations").update({ status: "revoked" }).eq("id", invitation.id);
+  }
+
+  const { error: deactivateError } = await admin
+    .from("profiles")
+    .update({ active: false, deactivated_at: new Date().toISOString(), deactivated_by: actingProfile.id })
+    .eq("id", userId);
+  if (deactivateError) {
+    return { error: deactivateError.message };
+  }
+
+  await admin.from("audit_log").insert({
+    user_id: actingProfile.id,
+    action: "user.invitation_revoked",
+    table_name: "profiles",
+    record_id: userId,
+  });
+
+  revalidatePath("/settings/users");
+  revalidatePath(`/settings/users/${userId}`);
+  return { success: true };
+}
+
 /** True if the profile's effective permission set includes users.manage (§5.1: management implicitly has everything). */
 function hasUsersManage(role: string, permissions: string[]): boolean {
   return role === "management" || permissions.includes("users.manage");
