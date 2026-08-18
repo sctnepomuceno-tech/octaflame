@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/table";
 import { InviteUserDialog } from "./invite-user-dialog";
 import { InvitationActions } from "./invitation-actions";
+import { ReinviteButton } from "./reinvite-button";
+import { ReactivateButton } from "./[id]/reactivate-button";
 
 export const metadata: Metadata = { title: "Users" };
 
@@ -104,6 +106,7 @@ export default async function UsersPage() {
                 <TableHead>Role</TableHead>
                 <TableHead>DSP</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -129,6 +132,15 @@ export default async function UsersPage() {
                     ) : (
                       <Badge variant="success">Active</Badge>
                     )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      {profile.must_change_password ? (
+                        <ReinviteButton userId={profile.id} variant="ghost" />
+                      ) : !profile.active ? (
+                        <ReactivateButton userId={profile.id} variant="ghost" />
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

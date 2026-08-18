@@ -448,6 +448,88 @@ export async function reactivateUser(userId: string): Promise<ActionResult> {
   return { success: true };
 }
 
+/**
+ * Reactivates (if needed) and resends a fresh invite email for a user who
+ * never completed first-login setup (§5.6) — covers both a still-active
+ * "Invited" user whose link expired and a deactivated one whose original
+ * user_invitations row is no longer 'pending' (e.g. it was revoked). Not
+ * valid once the user has set their own password: at that point access is
+ * restored with Reactivate alone, not a fresh invite link.
+ */
+export async function reinviteUser(userId: string): Promise<ActionResult> {
+  const actingProfile = await requirePermission("users.manage");
+  const admin = createAdminClient();
+
+  const { data: target, error: fetchError } = await admin
+    .from("profiles")
+    .select("id, email, full_name, role, active, must_change_password")
+    .eq("id", userId)
+    .single();
+  if (fetchError || !target) {
+    return { error: "User not found." };
+  }
+  if (!target.must_change_password) {
+    return { error: "This user already has their own password — reactivate instead." };
+  }
+
+  if (!target.active) {
+    const { error: reactivateError } = await admin
+      .from("profiles")
+      .update({ active: true, deactivated_at: null, deactivated_by: null })
+      .eq("id", userId);
+    if (reactivateError) {
+      if (reactivateError.message.includes("profiles_dsp_id_active_uniq")) {
+        return { error: "That DSP territory is already assigned to another active user. Reassign the territory first." };
+      }
+      return { error: reactivateError.message };
+    }
+  }
+
+  const siteUrl = await getSiteUrl();
+  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(target.email, {
+    redirectTo: `${siteUrl}/auth/callback`,
+  });
+  if (inviteError) {
+    return { error: inviteError.message };
+  }
+
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const { data: existingInvitation } = await admin
+    .from("user_invitations")
+    .select("id")
+    .ilike("email", target.email)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (existingInvitation) {
+    await admin
+      .from("user_invitations")
+      .update({ status: "pending", expires_at: expiresAt })
+      .eq("id", existingInvitation.id);
+  } else {
+    await admin.from("user_invitations").insert({
+      email: target.email,
+      full_name: target.full_name,
+      role: target.role,
+      invited_by: actingProfile.id,
+      status: "pending",
+      expires_at: expiresAt,
+    });
+  }
+
+  await admin.from("audit_log").insert({
+    user_id: actingProfile.id,
+    action: "user.reinvited",
+    table_name: "profiles",
+    record_id: userId,
+  });
+
+  revalidatePath("/settings/users");
+  revalidatePath(`/settings/users/${userId}`);
+  return { success: true };
+}
+
 export interface UnassignedDspUser {
   id: string;
   full_name: string;

@@ -2,13 +2,13 @@
 
 import { useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Loader2, UserCheck } from "lucide-react";
+import { Loader2, MailPlus } from "lucide-react";
 import { toast } from "sonner";
 
-import { reactivateUser } from "@/app/actions/users";
+import { reinviteUser } from "@/app/actions/users";
 import { Button } from "@/components/ui/button";
 
-export function ReactivateButton({
+export function ReinviteButton({
   userId,
   variant = "default",
 }: {
@@ -20,20 +20,20 @@ export function ReactivateButton({
 
   function submit() {
     startTransition(async () => {
-      const result = await reactivateUser(userId);
+      const result = await reinviteUser(userId);
       if (result.error) {
         toast.error(result.error);
         return;
       }
-      toast.success("User reactivated.");
+      toast.success("Invitation sent.");
       router.refresh();
     });
   }
 
   return (
     <Button onClick={submit} disabled={pending} variant={variant} size={variant === "ghost" ? "sm" : "default"}>
-      {pending ? <Loader2 className="animate-spin" /> : <UserCheck />}
-      Reactivate
+      {pending ? <Loader2 className="animate-spin" /> : <MailPlus />}
+      Reinvite
     </Button>
   );
 }
