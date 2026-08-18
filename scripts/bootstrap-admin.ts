@@ -19,8 +19,31 @@ import { config as loadEnv } from "dotenv";
 loadEnv({ path: ".env.local" });
 loadEnv(); // fall back to .env if present
 
-import { createAdminClient } from "../src/lib/supabase/admin";
+import { createClient } from "@supabase/supabase-js";
+
+import type { Database } from "../src/lib/supabase/database.types";
 import { ROLE_DEFAULT_PERMISSIONS } from "../src/lib/permissions";
+
+// Not importing src/lib/supabase/admin.ts here: it's gated by `server-only`,
+// which unconditionally throws outside Next's server build pipeline — this
+// script runs standalone via tsx, so it needs its own client construction.
+function createAdminClient() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!url || !serviceRoleKey) {
+    throw new Error(
+      "Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY environment variables."
+    );
+  }
+
+  return createClient<Database>(url, serviceRoleKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
+}
 
 async function findExistingAuthUserByEmail(
   supabase: ReturnType<typeof createAdminClient>,
