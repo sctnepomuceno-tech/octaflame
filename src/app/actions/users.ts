@@ -1,10 +1,10 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { requirePermission } from "@/lib/auth/current-user";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { generateTempPassword } from "@/lib/security/temp-password";
 import {
   inviteUserSchema,
   updateUserSchema,
@@ -18,18 +18,18 @@ import { isPermissionKey, resolvePermissions } from "@/lib/permissions";
 export interface ActionResult {
   error?: string;
   success?: boolean;
+  tempPassword?: string;
 }
 
-async function getSiteUrl(): Promise<string> {
-  if (process.env.NEXT_PUBLIC_SITE_URL) {
-    return process.env.NEXT_PUBLIC_SITE_URL;
-  }
-  const h = await headers();
-  const host = h.get("x-forwarded-host") ?? h.get("host");
-  const proto = h.get("x-forwarded-proto") ?? "https";
-  return `${proto}://${host}`;
-}
-
+/**
+ * Creates the account with a system-generated temporary password instead of
+ * emailing an invite link (§5.6). Supabase's invite/magic-link email
+ * requires a working Redirect URLs allow-list and a non-rate-limited mailer
+ * to reach the user at all — a temp password sidesteps both: Management
+ * gets it back immediately to hand to the invitee directly, no email step
+ * in the loop. must_change_password still forces them to set their own
+ * password on first login.
+ */
 export async function inviteUser(input: InviteUserInput): Promise<ActionResult> {
   const actingProfile = await requirePermission("users.manage");
 
@@ -52,16 +52,6 @@ export async function inviteUser(input: InviteUserInput): Promise<ActionResult> 
     return { error: "A user with this email already exists." };
   }
 
-  const { data: existingInvite } = await admin
-    .from("user_invitations")
-    .select("id")
-    .eq("status", "pending")
-    .ilike("email", data.email)
-    .maybeSingle();
-  if (existingInvite) {
-    return { error: "An invitation is already pending for this email." };
-  }
-
   if (data.role === "dsp") {
     const { data: claimed } = await admin
       .from("profiles")
@@ -75,21 +65,22 @@ export async function inviteUser(input: InviteUserInput): Promise<ActionResult> 
     }
   }
 
-  const siteUrl = await getSiteUrl();
-  const { data: invited, error: inviteError } =
-    await admin.auth.admin.inviteUserByEmail(data.email, {
-      data: { full_name: data.fullName },
-      redirectTo: `${siteUrl}/auth/callback`,
-    });
+  const tempPassword = generateTempPassword();
+  const { data: created, error: createError } = await admin.auth.admin.createUser({
+    email: data.email,
+    password: tempPassword,
+    email_confirm: true,
+    user_metadata: { full_name: data.fullName },
+  });
 
-  if (inviteError || !invited?.user) {
-    return { error: inviteError?.message ?? "Failed to send the invitation email." };
+  if (createError || !created?.user) {
+    return { error: createError?.message ?? "Failed to create the account." };
   }
 
   // Invited users set their own password on first login — same forced gate
   // as the bootstrap account (§5.5, §5.6).
   const { error: profileError } = await admin.from("profiles").insert({
-    id: invited.user.id,
+    id: created.user.id,
     full_name: data.fullName,
     email: data.email,
     phone: data.phone || null,
@@ -102,138 +93,82 @@ export async function inviteUser(input: InviteUserInput): Promise<ActionResult> 
   });
 
   if (profileError) {
-    await admin.auth.admin.deleteUser(invited.user.id);
+    await admin.auth.admin.deleteUser(created.user.id);
     return { error: profileError.message };
-  }
-
-  const { error: invitationError } = await admin.from("user_invitations").insert({
-    email: data.email,
-    full_name: data.fullName,
-    role: data.role,
-    dsp_id: dspId,
-    permissions,
-    invited_by: actingProfile.id,
-    status: "pending",
-  });
-
-  if (invitationError) {
-    return { error: invitationError.message };
   }
 
   await admin.from("audit_log").insert({
     user_id: actingProfile.id,
     action: "user.invited",
     table_name: "profiles",
-    record_id: invited.user.id,
+    record_id: created.user.id,
     new_value: { full_name: data.fullName, email: data.email, role: data.role, dsp_id: dspId, permissions },
   });
 
   revalidatePath("/settings/users");
-  return { success: true };
-}
-
-export async function resendInvitation(invitationId: string): Promise<ActionResult> {
-  const actingProfile = await requirePermission("users.manage");
-  const admin = createAdminClient();
-
-  const { data: invitation, error: fetchError } = await admin
-    .from("user_invitations")
-    .select("*")
-    .eq("id", invitationId)
-    .single();
-
-  if (fetchError || !invitation) {
-    return { error: "Invitation not found." };
-  }
-  if (invitation.status !== "pending") {
-    return { error: "Only pending invitations can be resent." };
-  }
-
-  const siteUrl = await getSiteUrl();
-  const { error: resendError } = await admin.auth.admin.inviteUserByEmail(
-    invitation.email,
-    { redirectTo: `${siteUrl}/auth/callback` }
-  );
-
-  if (resendError) {
-    return { error: resendError.message };
-  }
-
-  await admin
-    .from("user_invitations")
-    .update({ expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString() })
-    .eq("id", invitationId);
-
-  await admin.from("audit_log").insert({
-    user_id: actingProfile.id,
-    action: "user.invitation_resent",
-    table_name: "user_invitations",
-    record_id: invitationId,
-  });
-
-  revalidatePath("/settings/users");
-  return { success: true };
-}
-
-export async function revokeInvitation(invitationId: string): Promise<ActionResult> {
-  const actingProfile = await requirePermission("users.manage");
-  const admin = createAdminClient();
-
-  const { data: invitation, error: fetchError } = await admin
-    .from("user_invitations")
-    .select("*")
-    .eq("id", invitationId)
-    .single();
-
-  if (fetchError || !invitation) {
-    return { error: "Invitation not found." };
-  }
-  if (invitation.status !== "pending") {
-    return { error: "Only pending invitations can be revoked." };
-  }
-
-  const { error: revokeError } = await admin
-    .from("user_invitations")
-    .update({ status: "revoked" })
-    .eq("id", invitationId);
-  if (revokeError) {
-    return { error: revokeError.message };
-  }
-
-  // The profile/auth user were created eagerly at invite time (§5.6) — an
-  // unaccepted, revoked invitation must not sit open, so deactivate it.
-  // Never hard-delete (§5.9).
-  const { data: matchingProfile } = await admin
-    .from("profiles")
-    .select("id, active")
-    .ilike("email", invitation.email)
-    .eq("must_change_password", true)
-    .maybeSingle();
-
-  if (matchingProfile?.active) {
-    await admin
-      .from("profiles")
-      .update({ active: false, deactivated_at: new Date().toISOString(), deactivated_by: actingProfile.id })
-      .eq("id", matchingProfile.id);
-  }
-
-  await admin.from("audit_log").insert({
-    user_id: actingProfile.id,
-    action: "user.invitation_revoked",
-    table_name: "user_invitations",
-    record_id: invitationId,
-  });
-
-  revalidatePath("/settings/users");
-  return { success: true };
+  return { success: true, tempPassword };
 }
 
 /**
- * Cancels an in-flight invite from the user's row directly (§5.6), rather
- * than requiring the admin find the matching row in the separate Pending
- * invitations list. Same effect as revokeInvitation, keyed by user instead
- * of invitation id: marks the pending user_invitations row 'revoked' and
- * deactivates the profile so it isn't left open.
+ * Issues a fresh temporary password for a user who hasn't completed
+ * first-login setup yet — covers both a brand-new invite the admin needs to
+ * hand off again and a user stuck from before this flow existed. Reactivates
+ * first if needed, same DSP-uniqueness guard as reactivateUser.
+ */
+export async function issueTempPassword(userId: string): Promise<ActionResult> {
+  const actingProfile = await requirePermission("users.manage");
+  const admin = createAdminClient();
+
+  const { data: target, error: fetchError } = await admin
+    .from("profiles")
+    .select("id, active, must_change_password")
+    .eq("id", userId)
+    .single();
+  if (fetchError || !target) {
+    return { error: "User not found." };
+  }
+  if (!target.must_change_password) {
+    return { error: "This user already set their own password — reactivate instead." };
+  }
+
+  if (!target.active) {
+    const { error: reactivateError } = await admin
+      .from("profiles")
+      .update({ active: true, deactivated_at: null, deactivated_by: null })
+      .eq("id", userId);
+    if (reactivateError) {
+      if (reactivateError.message.includes("profiles_dsp_id_active_uniq")) {
+        return { error: "That DSP territory is already assigned to another active user. Reassign the territory first." };
+      }
+      return { error: reactivateError.message };
+    }
+  }
+
+  const tempPassword = generateTempPassword();
+  const { error: passwordError } = await admin.auth.admin.updateUserById(userId, {
+    password: tempPassword,
+  });
+  if (passwordError) {
+    return { error: passwordError.message };
+  }
+
+  await admin.from("audit_log").insert({
+    user_id: actingProfile.id,
+    action: "user.temp_password_issued",
+    table_name: "profiles",
+    record_id: userId,
+  });
+
+  revalidatePath("/settings/users");
+  revalidatePath(`/settings/users/${userId}`);
+  return { success: true, tempPassword };
+}
+
+/**
+ * Cancels an in-flight invite from the user's row (§5.6): deactivates a
+ * user who hasn't completed first-login setup yet, without needing a
+ * separate confirmation flow — Reactivate + Set password (issueTempPassword)
+ * are how they'd get back in.
  */
 export async function cancelInviteForUser(userId: string): Promise<ActionResult> {
   const actingProfile = await requirePermission("users.manage");
@@ -241,7 +176,7 @@ export async function cancelInviteForUser(userId: string): Promise<ActionResult>
 
   const { data: target, error: fetchError } = await admin
     .from("profiles")
-    .select("id, email, active, must_change_password")
+    .select("id, active, must_change_password")
     .eq("id", userId)
     .single();
   if (fetchError || !target) {
@@ -252,17 +187,6 @@ export async function cancelInviteForUser(userId: string): Promise<ActionResult>
   }
   if (!target.active) {
     return { error: "This user is already deactivated." };
-  }
-
-  const { data: invitation } = await admin
-    .from("user_invitations")
-    .select("id")
-    .eq("status", "pending")
-    .ilike("email", target.email)
-    .maybeSingle();
-
-  if (invitation) {
-    await admin.from("user_invitations").update({ status: "revoked" }).eq("id", invitation.id);
   }
 
   const { error: deactivateError } = await admin

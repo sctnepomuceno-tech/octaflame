@@ -14,6 +14,7 @@ import { DeactivateUserDialog } from "./deactivate-user-dialog";
 import { ReactivateButton } from "./reactivate-button";
 import { DeleteUserDialog } from "../delete-user-dialog";
 import { CancelInviteButton } from "../cancel-invite-button";
+import { SetPasswordButton } from "../set-password-button";
 
 export const metadata: Metadata = { title: "User" };
 
@@ -58,7 +59,10 @@ export default async function UserDetailPage(props: { params: Promise<{ id: stri
           <div className="flex items-center gap-2">
             {target.active ? (
               target.must_change_password ? (
-                <CancelInviteButton userId={target.id} />
+                <>
+                  <SetPasswordButton userId={target.id} email={target.email} />
+                  <CancelInviteButton userId={target.id} />
+                </>
               ) : (
                 <DeactivateUserDialog userId={target.id} userName={target.full_name} isDsp={target.role === "dsp"} />
               )

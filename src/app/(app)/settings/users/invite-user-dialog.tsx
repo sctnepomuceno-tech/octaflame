@@ -4,7 +4,6 @@ import { useEffect, useState, useTransition } from "react";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Loader2, UserPlus } from "lucide-react";
-import { toast } from "sonner";
 
 import { inviteUser } from "@/app/actions/users";
 import { inviteUserSchema, type InviteUserInput } from "@/lib/validation/users";
@@ -17,6 +16,7 @@ import {
   type Role,
 } from "@/lib/permissions";
 import { PermissionsFieldset } from "@/components/permissions-fieldset";
+import { CredentialsDialog } from "./credentials-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -59,6 +59,7 @@ export function InviteUserDialog({ dsps }: { dsps: DspOption[] }) {
   const [open, setOpen] = useState(false);
   const [pending, startTransition] = useTransition();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [credentials, setCredentials] = useState<{ email: string; password: string } | null>(null);
 
   const {
     control,
@@ -96,13 +97,16 @@ export function InviteUserDialog({ dsps }: { dsps: DspOption[] }) {
         setServerError(result.error);
         return;
       }
-      toast.success(`Invitation sent to ${data.email}`);
       reset(defaultValues);
       setOpen(false);
+      if (result.tempPassword) {
+        setCredentials({ email: data.email, password: result.tempPassword });
+      }
     });
   };
 
   return (
+    <>
     <Dialog
       open={open}
       onOpenChange={(next) => {
@@ -122,8 +126,10 @@ export function InviteUserDialog({ dsps }: { dsps: DspOption[] }) {
         <DialogHeader>
           <DialogTitle>Invite a user</DialogTitle>
           <DialogDescription>
-            They&apos;ll receive an email to set their own password. Permissions
-            are pre-filled from the role and editable before sending (§5.6).
+            No email is sent — you&apos;ll get a temporary password to share
+            with them directly, and they&apos;ll set their own on first
+            sign-in. Permissions are pre-filled from the role and editable
+            before creating the account (§5.6).
           </DialogDescription>
         </DialogHeader>
 
@@ -216,11 +222,21 @@ export function InviteUserDialog({ dsps }: { dsps: DspOption[] }) {
           <DialogFooter>
             <Button type="submit" disabled={pending}>
               {pending ? <Loader2 className="animate-spin" /> : null}
-              Send invitation
+              Create account
             </Button>
           </DialogFooter>
         </form>
       </DialogContent>
     </Dialog>
+    {credentials ? (
+      <CredentialsDialog
+        email={credentials.email}
+        password={credentials.password}
+        onOpenChange={(next) => {
+          if (!next) setCredentials(null);
+        }}
+      />
+    ) : null}
+    </>
   );
 }
