@@ -119,12 +119,12 @@ export function InviteUserDialog({ dsps }: { dsps: DspOption[] }) {
     >
       <DialogTrigger asChild>
         <Button>
-          <UserPlus /> Invite user
+          <UserPlus /> Add user
         </Button>
       </DialogTrigger>
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Invite a user</DialogTitle>
+          <DialogTitle>Add a user</DialogTitle>
           <DialogDescription>
             No email is sent — you&apos;ll get a temporary password to share
             with them directly, and they&apos;ll set their own on first

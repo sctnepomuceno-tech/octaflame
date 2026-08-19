@@ -19,6 +19,8 @@ export interface ActionResult {
   error?: string;
   success?: boolean;
   tempPassword?: string;
+  /** deleteUser only: the hard delete was refused (real history exists) so access was revoked instead. */
+  deactivatedInstead?: boolean;
 }
 
 /**
@@ -113,7 +115,7 @@ export async function inviteUser(input: InviteUserInput): Promise<ActionResult> 
  * Issues a fresh temporary password for a user who hasn't completed
  * first-login setup yet — covers both a brand-new invite the admin needs to
  * hand off again and a user stuck from before this flow existed. Reactivates
- * first if needed, same DSP-uniqueness guard as reactivateUser.
+ * first if needed (respecting the one-active-user-per-DSP constraint).
  */
 export async function issueTempPassword(userId: string): Promise<ActionResult> {
   const actingProfile = await requirePermission("users.manage");
@@ -162,51 +164,6 @@ export async function issueTempPassword(userId: string): Promise<ActionResult> {
   revalidatePath("/settings/users");
   revalidatePath(`/settings/users/${userId}`);
   return { success: true, tempPassword };
-}
-
-/**
- * Cancels an in-flight invite from the user's row (§5.6): deactivates a
- * user who hasn't completed first-login setup yet, without needing a
- * separate confirmation flow — Reactivate + Set password (issueTempPassword)
- * are how they'd get back in.
- */
-export async function cancelInviteForUser(userId: string): Promise<ActionResult> {
-  const actingProfile = await requirePermission("users.manage");
-  const admin = createAdminClient();
-
-  const { data: target, error: fetchError } = await admin
-    .from("profiles")
-    .select("id, active, must_change_password")
-    .eq("id", userId)
-    .single();
-  if (fetchError || !target) {
-    return { error: "User not found." };
-  }
-  if (!target.must_change_password) {
-    return { error: "This user already completed setup — deactivate instead." };
-  }
-  if (!target.active) {
-    return { error: "This user is already deactivated." };
-  }
-
-  const { error: deactivateError } = await admin
-    .from("profiles")
-    .update({ active: false, deactivated_at: new Date().toISOString(), deactivated_by: actingProfile.id })
-    .eq("id", userId);
-  if (deactivateError) {
-    return { error: deactivateError.message };
-  }
-
-  await admin.from("audit_log").insert({
-    user_id: actingProfile.id,
-    action: "user.invitation_revoked",
-    table_name: "profiles",
-    record_id: userId,
-  });
-
-  revalidatePath("/settings/users");
-  revalidatePath(`/settings/users/${userId}`);
-  return { success: true };
 }
 
 /** True if the profile's effective permission set includes users.manage (§5.1: management implicitly has everything). */
@@ -307,163 +264,116 @@ export async function updateUser(userId: string, input: UpdateUserInput): Promis
 }
 
 /**
- * Deactivates a user and, for a DSP user, runs the handover flow (§5.9):
- * offer a replacement territory owner (an existing DSP-role user with no
- * current territory — promoting a different role inline is out of scope)
- * and bulk-reassign their open tasks so follow-ups don't silently vanish.
- * Customers stay attached to the DSP record and historical sales keep
- * their original created_by — neither is touched here.
- */
-export async function deactivateUser(userId: string, input: DeactivateUserInput): Promise<ActionResult> {
-  const actingProfile = await requirePermission("users.manage");
-  const admin = createAdminClient();
-
-  const parsed = deactivateUserSchema.safeParse(input);
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
-  }
-  const data = parsed.data;
-
-  const { data: target, error: fetchError } = await admin
-    .from("profiles")
-    .select("id, role, dsp_id, active")
-    .eq("id", userId)
-    .single();
-  if (fetchError || !target) {
-    return { error: "User not found." };
-  }
-  if (!target.active) {
-    return { error: "This user is already deactivated." };
-  }
-
-  if (target.role === "management") {
-    const count = await activeManagementCount(admin);
-    if (count <= 1) {
-      return { error: "This is the last active Management account and can't be deactivated. Invite a second Management account first." };
-    }
-  }
-
-  const { error: deactivateError } = await admin
-    .from("profiles")
-    .update({ active: false, deactivated_at: new Date().toISOString(), deactivated_by: actingProfile.id })
-    .eq("id", userId);
-  if (deactivateError) {
-    return { error: deactivateError.message };
-  }
-
-  let reassignToId: string | null = null;
-  if (data.reassignTasksTo === "replacement") {
-    reassignToId = data.replacementUserId ?? null;
-  } else if (data.reassignTasksTo === "self") {
-    reassignToId = actingProfile.id;
-  }
-
-  if (reassignToId) {
-    const { data: reassigned } = await admin
-      .from("tasks")
-      .update({ assigned_to: reassignToId })
-      .eq("assigned_to", userId)
-      .in("status", ["pending", "in_progress"])
-      .select("id");
-
-    if (reassigned && reassigned.length > 0) {
-      await admin.from("audit_log").insert({
-        user_id: actingProfile.id,
-        action: "task.bulk_reassigned",
-        table_name: "tasks",
-        record_id: userId,
-        new_value: { from: userId, to: reassignToId, count: reassigned.length },
-      });
-    }
-  }
-
-  if (target.role === "dsp" && target.dsp_id && data.replacementUserId) {
-    await admin
-      .from("profiles")
-      .update({ dsp_id: target.dsp_id })
-      .eq("id", data.replacementUserId)
-      .eq("role", "dsp");
-  }
-
-  await admin.from("audit_log").insert({
-    user_id: actingProfile.id,
-    action: "user.deactivated",
-    table_name: "profiles",
-    record_id: userId,
-    previous_value: { active: true },
-    new_value: { active: false, reassign_tasks_to: data.reassignTasksTo, replacement_user_id: data.replacementUserId ?? null },
-  });
-
-  revalidatePath("/settings/users");
-  revalidatePath(`/settings/users/${userId}`);
-  revalidatePath("/tasks");
-  return { success: true };
-}
-
-export async function reactivateUser(userId: string): Promise<ActionResult> {
-  const actingProfile = await requirePermission("users.manage");
-  const admin = createAdminClient();
-
-  const { error } = await admin
-    .from("profiles")
-    .update({ active: true, deactivated_at: null, deactivated_by: null })
-    .eq("id", userId);
-
-  if (error) {
-    if (error.message.includes("profiles_dsp_id_active_uniq")) {
-      return { error: "That DSP territory is already assigned to another active user. Reassign the territory first." };
-    }
-    return { error: error.message };
-  }
-
-  await admin.from("audit_log").insert({
-    user_id: actingProfile.id,
-    action: "user.reactivated",
-    table_name: "profiles",
-    record_id: userId,
-    new_value: { active: true },
-  });
-
-  revalidatePath("/settings/users");
-  revalidatePath(`/settings/users/${userId}`);
-  return { success: true };
-}
-
-/**
- * Permanently removes a deactivated user so their email can be invited
- * fresh. Only allowed once deactivated — Supabase's inviteUserByEmail
- * refuses to resend to an email that already has any auth.users record
- * (confirmed or not), so a stuck invite has no "resend" path, only this
- * one: delete and re-invite from scratch.
+ * Deletes a user account outright — Management's only removal action now,
+ * no separate "deactivate" step to think about. For an active DSP user
+ * this still runs the handover flow first (§5.9): offer a replacement
+ * territory owner and bulk-reassign open tasks, so follow-ups don't
+ * silently vanish. Customers stay attached to the DSP record and
+ * historical sales keep their original created_by — neither is touched.
  *
  * Deleting the auth user cascades to the profiles row (profiles_id_fkey
  * ON DELETE CASCADE), but every other table that references profiles(id)
  * (sales.created_by, tasks.assigned_to, audit_log.user_id, ...) does so
- * with no cascade — so this fails safely (nothing is deleted) the moment
- * the user has any real history, which is exactly when they should stay
- * deactivated instead.
+ * with no cascade — so if this user has any real history, the delete
+ * step fails safely and their access is left revoked (profile set
+ * inactive) instead of the account vanishing out from under those
+ * records. Never overwrites history, just can't remove it either.
  */
-export async function deleteDeactivatedUser(userId: string): Promise<ActionResult> {
+export async function deleteUser(userId: string, input?: DeactivateUserInput): Promise<ActionResult> {
   const actingProfile = await requirePermission("users.manage");
   const admin = createAdminClient();
 
+  if (userId === actingProfile.id) {
+    return { error: "You can't delete your own account — ask another Management user to do this." };
+  }
+
   const { data: target, error: fetchError } = await admin
     .from("profiles")
-    .select("id, email, full_name, active")
+    .select("id, role, dsp_id, active, full_name, email")
     .eq("id", userId)
     .single();
   if (fetchError || !target) {
     return { error: "User not found." };
   }
+
+  if (target.active && target.role === "management") {
+    const count = await activeManagementCount(admin);
+    if (count <= 1) {
+      return { error: "This is the last active Management account and can't be removed. Invite a second Management account first." };
+    }
+  }
+
   if (target.active) {
-    return { error: "Only deactivated users can be deleted. Deactivate them first." };
+    const parsed = deactivateUserSchema.safeParse(input ?? { reassignTasksTo: "none" });
+    if (!parsed.success) {
+      return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+    }
+    const data = parsed.data;
+
+    // Revoke access immediately, before attempting the real delete —
+    // if the delete below fails, this is the fallback state they're left in.
+    const { error: deactivateError } = await admin
+      .from("profiles")
+      .update({ active: false, deactivated_at: new Date().toISOString(), deactivated_by: actingProfile.id })
+      .eq("id", userId);
+    if (deactivateError) {
+      return { error: deactivateError.message };
+    }
+
+    let reassignToId: string | null = null;
+    if (data.reassignTasksTo === "replacement") {
+      reassignToId = data.replacementUserId ?? null;
+    } else if (data.reassignTasksTo === "self") {
+      reassignToId = actingProfile.id;
+    }
+
+    if (reassignToId) {
+      const { data: reassigned } = await admin
+        .from("tasks")
+        .update({ assigned_to: reassignToId })
+        .eq("assigned_to", userId)
+        .in("status", ["pending", "in_progress"])
+        .select("id");
+
+      if (reassigned && reassigned.length > 0) {
+        await admin.from("audit_log").insert({
+          user_id: actingProfile.id,
+          action: "task.bulk_reassigned",
+          table_name: "tasks",
+          record_id: userId,
+          new_value: { from: userId, to: reassignToId, count: reassigned.length },
+        });
+      }
+    }
+
+    if (target.role === "dsp" && target.dsp_id && data.replacementUserId) {
+      await admin
+        .from("profiles")
+        .update({ dsp_id: target.dsp_id })
+        .eq("id", data.replacementUserId)
+        .eq("role", "dsp");
+    }
   }
 
   const { error: deleteError } = await admin.auth.admin.deleteUser(userId);
+
+  revalidatePath("/settings/users");
+  revalidatePath(`/settings/users/${userId}`);
+  revalidatePath("/tasks");
+
   if (deleteError) {
+    await admin.from("audit_log").insert({
+      user_id: actingProfile.id,
+      action: "user.deactivated",
+      table_name: "profiles",
+      record_id: userId,
+      previous_value: { active: true },
+    });
     return {
+      success: true,
+      deactivatedInstead: true,
       error:
-        "This user has activity history (sales, tasks, or other records) tied to their account and can't be deleted — keep them deactivated instead.",
+        "This account has activity history (sales, tasks, or other records) and can't be fully deleted, so access has been revoked instead — their historical records stay intact.",
     };
   }
 
@@ -477,7 +387,6 @@ export async function deleteDeactivatedUser(userId: string): Promise<ActionResul
     previous_value: { full_name: target.full_name, email: target.email },
   });
 
-  revalidatePath("/settings/users");
   return { success: true };
 }
 

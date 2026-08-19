@@ -10,10 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { EditUserForm } from "./edit-user-form";
-import { DeactivateUserDialog } from "./deactivate-user-dialog";
-import { ReactivateButton } from "./reactivate-button";
 import { DeleteUserDialog } from "../delete-user-dialog";
-import { CancelInviteButton } from "../cancel-invite-button";
 import { SetPasswordButton } from "../set-password-button";
 
 export const metadata: Metadata = { title: "User" };
@@ -57,21 +54,17 @@ export default async function UserDetailPage(props: { params: Promise<{ id: stri
             <p className="text-sm text-muted-foreground">{target.email}</p>
           </div>
           <div className="flex items-center gap-2">
-            {target.active ? (
-              target.must_change_password ? (
-                <>
-                  <SetPasswordButton userId={target.id} email={target.email} />
-                  <CancelInviteButton userId={target.id} />
-                </>
-              ) : (
-                <DeactivateUserDialog userId={target.id} userName={target.full_name} isDsp={target.role === "dsp"} />
-              )
-            ) : (
-              <>
-                <ReactivateButton userId={target.id} />
-                <DeleteUserDialog userId={target.id} userName={target.full_name} />
-              </>
-            )}
+            {target.active && target.must_change_password ? (
+              <SetPasswordButton userId={target.id} email={target.email} />
+            ) : null}
+            {!isSelf ? (
+              <DeleteUserDialog
+                userId={target.id}
+                userName={target.full_name}
+                isActive={target.active}
+                isDsp={target.role === "dsp"}
+              />
+            ) : null}
           </div>
         </div>
       </div>

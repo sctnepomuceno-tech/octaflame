@@ -15,15 +15,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { InviteUserDialog } from "./invite-user-dialog";
-import { ReactivateButton } from "./[id]/reactivate-button";
 import { DeleteUserDialog } from "./delete-user-dialog";
-import { CancelInviteButton } from "./cancel-invite-button";
 import { SetPasswordButton } from "./set-password-button";
 
 export const metadata: Metadata = { title: "Users" };
 
 export default async function UsersPage() {
-  await requirePermission("users.manage");
+  const actingProfile = await requirePermission("users.manage");
 
   const supabase = await createClient();
 
@@ -44,7 +42,7 @@ export default async function UsersPage() {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Users</h1>
           <p className="text-sm text-muted-foreground">
-            Invite teammates and manage who has access.
+            Add teammates and manage who has access.
           </p>
         </div>
         <InviteUserDialog dsps={dsps ?? []} />
@@ -92,16 +90,17 @@ export default async function UsersPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">
-                      {!profile.active ? (
-                        <>
-                          <ReactivateButton userId={profile.id} variant="ghost" />
-                          <DeleteUserDialog userId={profile.id} userName={profile.full_name} />
-                        </>
-                      ) : profile.must_change_password ? (
-                        <>
-                          <SetPasswordButton userId={profile.id} email={profile.email} variant="ghost" />
-                          <CancelInviteButton userId={profile.id} variant="ghost" />
-                        </>
+                      {profile.must_change_password && profile.active ? (
+                        <SetPasswordButton userId={profile.id} email={profile.email} variant="ghost" />
+                      ) : null}
+                      {profile.id !== actingProfile.id ? (
+                        <DeleteUserDialog
+                          userId={profile.id}
+                          userName={profile.full_name}
+                          isActive={profile.active}
+                          isDsp={profile.role === "dsp"}
+                          variant="ghost"
+                        />
                       ) : null}
                     </div>
                   </TableCell>
