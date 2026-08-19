@@ -6,16 +6,21 @@ import { Loader2 } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 /**
- * Destination for Supabase invite/recovery email links. The token arrives
- * in the URL hash, which never reaches the server — the browser client
- * (detectSessionInUrl) exchanges it for a session and persists it to
- * cookies, then we hard-navigate so middleware re-evaluates with those
- * cookies present (§5.6).
+ * Destination for Supabase invite/recovery email links. The browser client
+ * is configured for the PKCE flow (@supabase/ssr's createBrowserClient
+ * default), so the email link arrives as ?code=... rather than a URL hash
+ * — it has to be explicitly exchanged for a session before it's persisted
+ * to cookies. Once that's done we hard-navigate so middleware re-evaluates
+ * with those cookies present (§5.6).
  */
 export default function AuthCallbackPage() {
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getSession().finally(() => {
+    const code = new URL(window.location.href).searchParams.get("code");
+    const settled = code
+      ? supabase.auth.exchangeCodeForSession(code)
+      : supabase.auth.getSession();
+    settled.finally(() => {
       window.location.replace("/");
     });
   }, []);
