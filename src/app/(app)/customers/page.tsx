@@ -22,7 +22,7 @@ import { CustomerStatusBadge } from "./customer-status-badge";
 export const metadata: Metadata = { title: "Customers" };
 
 const PAGE_SIZE = 50;
-const CUSTOMER_TYPES: CustomerType[] = ["HH", "RTL", "WS"];
+const CUSTOMER_TYPES: CustomerType[] = ["HH", "RTL", "WS", "SD"];
 const CUSTOMER_STATUSES: CustomerStatus[] = [
   "prospect",
   "newly_acquired",

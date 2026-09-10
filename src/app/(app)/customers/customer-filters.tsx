@@ -18,6 +18,7 @@ const TYPES = [
   { value: "HH", label: "Household" },
   { value: "RTL", label: "Retail" },
   { value: "WS", label: "Wholesale" },
+  { value: "SD", label: "Subdealer" },
 ];
 
 const STATUSES = [

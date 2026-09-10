@@ -41,6 +41,7 @@ const CUSTOMER_TYPES: { value: CustomerFormInput["customerType"]; label: string;
   { value: "HH", label: "Household", hint: "Individual household buyer" },
   { value: "RTL", label: "Retail", hint: "Sari-sari store, counts toward the account KPI" },
   { value: "WS", label: "Wholesale", hint: "Bulk buyer, counts toward the account KPI" },
+  { value: "SD", label: "Subdealer", hint: "Distributor reselling further downstream" },
 ];
 
 const defaultValues: CustomerFormInput = {

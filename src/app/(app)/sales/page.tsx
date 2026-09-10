@@ -28,7 +28,7 @@ const PAYMENT_VARIANT: Record<string, "success" | "warning" | "destructive"> = {
   unpaid: "destructive",
 };
 
-const CUSTOMER_TYPES: CustomerType[] = ["HH", "RTL", "WS"];
+const CUSTOMER_TYPES: CustomerType[] = ["HH", "RTL", "WS", "SD"];
 const PAYMENT_STATUSES: PaymentStatus[] = ["paid", "partial", "unpaid"];
 
 export default async function SalesPage(props: {

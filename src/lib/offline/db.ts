@@ -46,7 +46,7 @@ export interface PendingCustomer {
   businessName?: string;
   ownerName?: string;
   contactNumber?: string;
-  customerType: "HH" | "RTL" | "WS";
+  customerType: "HH" | "RTL" | "WS" | "SD";
   municipalityId: string;
   barangay?: string;
   address?: string;
@@ -61,7 +61,7 @@ export interface CachedCustomer {
   id: string;
   business_name: string | null;
   owner_name: string | null;
-  customer_type: "HH" | "RTL" | "WS";
+  customer_type: "HH" | "RTL" | "WS" | "SD";
   municipality_id: string;
 }
 

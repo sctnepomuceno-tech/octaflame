@@ -89,6 +89,7 @@ export function SalesFilters({ dsps, municipalities }: { dsps: Option[]; municip
           <SelectItem value="HH">Household</SelectItem>
           <SelectItem value="RTL">Retail</SelectItem>
           <SelectItem value="WS">Wholesale</SelectItem>
+          <SelectItem value="SD">Subdealer</SelectItem>
         </SelectContent>
       </Select>
       <Select value={searchParams.get("payment") ?? "all"} onValueChange={(v) => setParam("payment", v)}>

@@ -1,10 +1,11 @@
 import { z } from "zod";
 
-// HH requires only a name + municipality. RTL/WS are the accounts counted
-// toward the 300-account KPI, so they must be real and reachable (§6.2).
+// HH requires only a name + municipality. RTL/WS/SD are business accounts
+// and must be real and reachable (§6.2) — RTL/WS also count toward the
+// 300-account KPI.
 export const customerFormSchema = z
   .object({
-    customerType: z.enum(["HH", "RTL", "WS"]),
+    customerType: z.enum(["HH", "RTL", "WS", "SD"]),
     businessName: z.string().trim().optional(),
     ownerName: z.string().trim().optional(),
     contactNumber: z.string().trim().optional(),
@@ -26,21 +27,21 @@ export const customerFormSchema = z
       if (!data.ownerName) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Owner name is required for RTL/WS accounts",
+          message: "Owner name is required for RTL/WS/SD accounts",
           path: ["ownerName"],
         });
       }
       if (!data.contactNumber) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Contact number is required for RTL/WS accounts",
+          message: "Contact number is required for RTL/WS/SD accounts",
           path: ["contactNumber"],
         });
       }
       if (!data.address) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "Address is required for RTL/WS accounts",
+          message: "Address is required for RTL/WS/SD accounts",
           path: ["address"],
         });
       }

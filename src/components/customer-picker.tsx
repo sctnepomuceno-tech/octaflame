@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 export interface SelectedCustomer {
   id: string;
   label: string;
-  customerType: "HH" | "RTL" | "WS";
+  customerType: "HH" | "RTL" | "WS" | "SD";
   municipalityId: string;
 }
 

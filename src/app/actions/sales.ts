@@ -64,7 +64,7 @@ export interface CustomerSearchResult {
   id: string;
   business_name: string | null;
   owner_name: string | null;
-  customer_type: "HH" | "RTL" | "WS";
+  customer_type: "HH" | "RTL" | "WS" | "SD";
   municipality_id: string;
   latest_purchase_date: string | null;
 }

@@ -11,7 +11,7 @@ export interface ReportFilters {
   dspId?: string;
   municipalityId?: string;
   customerId?: string;
-  customerType?: "HH" | "RTL" | "WS";
+  customerType?: "HH" | "RTL" | "WS" | "SD";
   productId?: string;
   paymentStatus?: "paid" | "partial" | "unpaid";
   volumeThresholdKg?: number;

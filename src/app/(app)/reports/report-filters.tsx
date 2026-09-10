@@ -95,6 +95,7 @@ export function ReportFilters({ dsps, municipalities }: { dsps: Option[]; munici
           <SelectItem value="HH">Household</SelectItem>
           <SelectItem value="RTL">Retail</SelectItem>
           <SelectItem value="WS">Wholesale</SelectItem>
+          <SelectItem value="SD">Subdealer</SelectItem>
         </SelectContent>
       </Select>
     </div>

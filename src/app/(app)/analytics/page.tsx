@@ -180,7 +180,13 @@ export default async function AnalyticsPage(props: {
   const deploymentsPerDspPerWeek = deploymentCount / activeDspCount / (TREND_MONTHS * 4.345);
 
   // --- Customer acquisition curve (RTL/WS, cumulative toward the 300 target) -----
-  const acquisitions = (customers ?? []).filter((c) => c.customer_type !== "HH" && c.first_purchase_date);
+  // Matches company_kpi_progress's definition exactly — SD (Subdealer)
+  // accounts are real business accounts but aren't part of this specific
+  // 300-account target, so they're excluded here even though other
+  // "any business account" aggregations on this page treat SD like RTL/WS.
+  const acquisitions = (customers ?? []).filter(
+    (c) => (c.customer_type === "RTL" || c.customer_type === "WS") && c.first_purchase_date
+  );
   const baselineCount = acquisitions.filter((c) => c.first_purchase_date! < trendStart).length;
   const acquisitionsByMonth = new Map<string, number>();
   for (const c of acquisitions) {
