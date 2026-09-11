@@ -30,6 +30,7 @@ const CUSTOMER_STATUSES: CustomerStatus[] = [
   "dormant",
   "inactive",
 ];
+const SORTS = ["recent", "volume_desc", "volume_asc", "amount_desc"] as const;
 
 export default async function CustomersPage(props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -41,6 +42,8 @@ export default async function CustomersPage(props: {
   const statusParam = typeof params.status === "string" ? params.status : "all";
   const type = CUSTOMER_TYPES.find((t) => t === typeParam);
   const status = CUSTOMER_STATUSES.find((s) => s === statusParam);
+  const sortParam = typeof params.sort === "string" ? params.sort : "recent";
+  const sort = SORTS.find((s) => s === sortParam) ?? "recent";
 
   const supabase = await createClient();
 
@@ -49,8 +52,17 @@ export default async function CustomersPage(props: {
     .select(
       "id, business_name, owner_name, customer_type, status, municipality_id, total_transactions, lifetime_volume_kg, lifetime_amount, notes"
     )
-    .order("created_at", { ascending: false })
     .limit(PAGE_SIZE);
+
+  if (sort === "volume_desc") {
+    query = query.order("lifetime_volume_kg", { ascending: false });
+  } else if (sort === "volume_asc") {
+    query = query.order("lifetime_volume_kg", { ascending: true });
+  } else if (sort === "amount_desc") {
+    query = query.order("lifetime_amount", { ascending: false });
+  } else {
+    query = query.order("created_at", { ascending: false });
+  }
 
   if (q) {
     query = query.or(`business_name.ilike.%${q}%,owner_name.ilike.%${q}%`);

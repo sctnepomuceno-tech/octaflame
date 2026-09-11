@@ -30,6 +30,13 @@ const STATUSES = [
   { value: "inactive", label: "Inactive" },
 ];
 
+const SORTS = [
+  { value: "recent", label: "Most recent" },
+  { value: "volume_desc", label: "Volume: high to low" },
+  { value: "volume_asc", label: "Volume: low to high" },
+  { value: "amount_desc", label: "Amount: high to low" },
+];
+
 export function CustomerFilters() {
   const router = useRouter();
   const pathname = usePathname();
@@ -86,6 +93,21 @@ export function CustomerFilters() {
         </SelectTrigger>
         <SelectContent>
           {STATUSES.map((s) => (
+            <SelectItem key={s.value} value={s.value}>
+              {s.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Select
+        defaultValue={searchParams.get("sort") ?? "recent"}
+        onValueChange={(v) => setParam("sort", v)}
+      >
+        <SelectTrigger className="w-[180px]">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {SORTS.map((s) => (
             <SelectItem key={s.value} value={s.value}>
               {s.label}
             </SelectItem>
