@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 import { createClient } from "@/lib/supabase/server";
 import { periodStartDate, todayDateString, type Period } from "@/lib/dates";
 import { formatCount, formatCurrency, formatKg, formatPercent } from "@/lib/volume/format";
@@ -14,13 +12,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
-
-const PERIODS: { value: Period; label: string }[] = [
-  { value: "today", label: "Today" },
-  { value: "wtd", label: "WTD" },
-  { value: "mtd", label: "MTD" },
-  { value: "ytd", label: "YTD" },
-];
 
 export async function ManagementTier2({ period }: { period: Period }) {
   const supabase = await createClient();
@@ -134,24 +125,6 @@ export async function ManagementTier2({ period }: { period: Period }) {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-base font-semibold">This period</h2>
-        <div className="flex gap-1 rounded-lg bg-muted p-1">
-          {PERIODS.map((p) => (
-            <Link
-              key={p.value}
-              href={`/?period=${p.value}`}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium",
-                p.value === period ? "bg-background shadow-sm" : "text-muted-foreground"
-              )}
-            >
-              {p.label}
-            </Link>
-          ))}
-        </div>
-      </div>
-
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Card className="p-4">
           <CardContent className="p-0">

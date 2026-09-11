@@ -13,9 +13,17 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AnimatedNumber } from "@/components/motion/animated-number";
 import { StaggerGrid, StaggerItem } from "@/components/motion/stagger-grid";
+import { cn } from "@/lib/utils";
 import { ManagementTier2 } from "./management-tier2";
 
 const CURRENT_YEAR = new Date().getFullYear();
+
+const PERIODS: { value: Period; label: string }[] = [
+  { value: "today", label: "Today" },
+  { value: "wtd", label: "WTD" },
+  { value: "mtd", label: "MTD" },
+  { value: "ytd", label: "YTD" },
+];
 
 function KpiCard({
   title,
@@ -208,6 +216,24 @@ export async function ManagementDashboard({ period }: { period: Period }) {
       <Suspense fallback={<Skeleton className="h-12 w-full" />}>
         <ExceptionsStrip />
       </Suspense>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-base font-semibold">This period</h2>
+        <div className="flex gap-1 rounded-lg bg-muted p-1">
+          {PERIODS.map((p) => (
+            <Link
+              key={p.value}
+              href={`/?period=${p.value}`}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm font-medium",
+                p.value === period ? "bg-background shadow-sm" : "text-muted-foreground"
+              )}
+            >
+              {p.label}
+            </Link>
+          ))}
+        </div>
+      </div>
 
       <Suspense fallback={<Tier2Skeleton />} key={period}>
         <ManagementTier2 period={period} />
