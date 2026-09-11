@@ -47,13 +47,17 @@ export async function updateSession(request: NextRequest) {
     }
   );
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims() verifies the JWT locally (WebCrypto + cached JWKS) instead
+  // of round-tripping to the Auth server on every request like getUser()
+  // does — this runs on every navigation, so that round trip is pure
+  // added latency. Falls back to a network check automatically if the
+  // project ever moves off asymmetric signing keys.
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims ?? null;
 
   const { pathname } = request.nextUrl;
 
-  if (!user) {
+  if (!claims) {
     if (isPublicPath(pathname)) {
       return supabaseResponse;
     }
@@ -66,7 +70,7 @@ export async function updateSession(request: NextRequest) {
   const { data: profile } = await supabase
     .from("profiles")
     .select("active, must_change_password")
-    .eq("id", user.id)
+    .eq("id", claims.sub)
     .single();
 
   if (!profile || !profile.active) {

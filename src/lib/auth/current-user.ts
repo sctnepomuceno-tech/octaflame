@@ -20,18 +20,20 @@ export type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 export const getCurrentProfile = cache(async (): Promise<Profile | null> => {
   const supabase = await createClient();
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getClaims() verifies the JWT locally instead of calling the Auth
+  // server like getUser() does — this runs on every server component
+  // render, so avoiding that round trip matters for perceived latency.
+  const { data } = await supabase.auth.getClaims();
+  const claims = data?.claims ?? null;
 
-  if (!user) {
+  if (!claims) {
     return null;
   }
 
   const { data: profile } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", user.id)
+    .eq("id", claims.sub)
     .single();
 
   return profile ?? null;
