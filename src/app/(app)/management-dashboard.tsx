@@ -17,6 +17,11 @@ import { cn } from "@/lib/utils";
 import { ManagementTier2 } from "./management-tier2";
 
 const CURRENT_YEAR = new Date().getFullYear();
+const CURRENT_MONTH = new Date().getMonth() + 1;
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
 
 const PERIODS: { value: Period; label: string }[] = [
   { value: "today", label: "Today" },
@@ -32,6 +37,7 @@ function KpiCard({
   format,
   targetLabel,
   summary,
+  paceOverride,
 }: {
   title: string;
   actual: number;
@@ -39,8 +45,12 @@ function KpiCard({
   format: "count" | "mt";
   targetLabel: string;
   summary: string;
+  /** Override pace status/progress for non-annual targets (computeKpiPace assumes a full-year cycle). */
+  paceOverride?: { progressPct: number; onTrack: boolean };
 }) {
-  const pace = computeKpiPace(actual, target);
+  const pace = paceOverride
+    ? { progressPct: paceOverride.progressPct, paceStatus: paceOverride.onTrack ? "on_track" as const : "behind" as const }
+    : computeKpiPace(actual, target);
   const pct = Math.min(pace.progressPct, 1);
 
   return (
@@ -156,6 +166,30 @@ async function ExceptionsStrip() {
   );
 }
 
+function daysInMonth(year: number, month: number): number {
+  return new Date(Date.UTC(year, month, 0)).getUTCDate();
+}
+
+/** Monthly targets pace over a single month, not the annual cycle computeKpiPace assumes. */
+function monthlyPaceSummary(actual: number, target: number, year: number, month: number, unit: string): string {
+  const totalDays = daysInMonth(year, month);
+  const now = new Date();
+  const isCurrentMonth = now.getFullYear() === year && now.getMonth() + 1 === month;
+  const dayOfMonth = isCurrentMonth ? now.getDate() : totalDays;
+  const expectedPct = dayOfMonth / totalDays;
+  const progressPct = target > 0 ? actual / target : 0;
+  const daysLeft = Math.max(0, totalDays - dayOfMonth);
+
+  if (progressPct >= expectedPct) {
+    return daysLeft > 0
+      ? `On pace — ${daysLeft} day${daysLeft === 1 ? "" : "s"} left this month.`
+      : "Month complete.";
+  }
+  const remaining = Math.max(0, target - actual);
+  const perDay = daysLeft > 0 ? remaining / daysLeft : remaining;
+  return `Behind pace — needs ~${perDay.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}/day for the remaining ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`;
+}
+
 function Tier2Skeleton() {
   return (
     <div className="flex flex-col gap-4">
@@ -169,8 +203,12 @@ export async function ManagementDashboard({ period }: { period: Period }) {
   const supabase = await createClient();
   const volumeConstants = await getVolumeConstants();
 
-  const { data: kpiRows } = await supabase.rpc("company_kpi_progress", { p_year: CURRENT_YEAR });
+  const [{ data: kpiRows }, { data: monthlyRows }] = await Promise.all([
+    supabase.rpc("company_kpi_progress", { p_year: CURRENT_YEAR }),
+    supabase.rpc("company_kpi_progress_monthly", { p_year: CURRENT_YEAR, p_month: CURRENT_MONTH }),
+  ]);
   const kpi = kpiRows?.[0];
+  const monthlyKpi = monthlyRows?.[0];
 
   const accountsTarget = kpi?.accounts_target ?? 300;
   const volumeTargetMt = kpi?.volume_target_mt ?? 14.45;
@@ -182,6 +220,9 @@ export async function ManagementDashboard({ period }: { period: Period }) {
   const requiredKgPerMonth = volumePace.requiredPerMonth * 1000;
   const requiredCratesPerMonth =
     requiredKgPerMonth / (volumeConstants.kgPerCanister * volumeConstants.canistersPerCrate);
+
+  const monthlyVolumeMt = monthlyKpi ? kgToMt(monthlyKpi.total_volume_kg) : 0;
+  const monthName = MONTH_NAMES[CURRENT_MONTH - 1];
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
@@ -212,6 +253,60 @@ export async function ManagementDashboard({ period }: { period: Period }) {
           />
         </StaggerItem>
       </StaggerGrid>
+
+      {monthlyKpi ? (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-semibold">{monthName} target</h2>
+            <Link href="/settings/kpi-targets" className="text-xs text-muted-foreground hover:underline">
+              Edit KPI targets
+            </Link>
+          </div>
+          <StaggerGrid className="grid gap-4 sm:grid-cols-2">
+            <StaggerItem>
+              <KpiCard
+                title={`${monthName} accounts`}
+                actual={monthlyKpi.total_accounts}
+                target={monthlyKpi.accounts_target}
+                format="count"
+                targetLabel={formatCount(monthlyKpi.accounts_target)}
+                summary={monthlyPaceSummary(
+                  monthlyKpi.total_accounts,
+                  monthlyKpi.accounts_target,
+                  CURRENT_YEAR,
+                  CURRENT_MONTH,
+                  "accounts"
+                )}
+                paceOverride={{
+                  progressPct: monthlyKpi.accounts_target > 0 ? monthlyKpi.total_accounts / monthlyKpi.accounts_target : 0,
+                  onTrack: monthlyKpi.total_accounts >= monthlyKpi.accounts_target * (new Date().getDate() / daysInMonth(CURRENT_YEAR, CURRENT_MONTH)),
+                }}
+              />
+            </StaggerItem>
+            <StaggerItem>
+              <KpiCard
+                title={`${monthName} volume`}
+                actual={monthlyVolumeMt}
+                target={monthlyKpi.volume_target_mt}
+                format="mt"
+                targetLabel={formatMt(monthlyKpi.volume_target_mt)}
+                summary={monthlyPaceSummary(monthlyVolumeMt, monthlyKpi.volume_target_mt, CURRENT_YEAR, CURRENT_MONTH, "MT")}
+                paceOverride={{
+                  progressPct: monthlyKpi.volume_target_mt > 0 ? monthlyVolumeMt / monthlyKpi.volume_target_mt : 0,
+                  onTrack: monthlyVolumeMt >= monthlyKpi.volume_target_mt * (new Date().getDate() / daysInMonth(CURRENT_YEAR, CURRENT_MONTH)),
+                }}
+              />
+            </StaggerItem>
+          </StaggerGrid>
+        </div>
+      ) : (
+        <Link
+          href="/settings/kpi-targets"
+          className="text-xs text-muted-foreground hover:underline"
+        >
+          Set a target for {monthName} to see this month&apos;s KPI here →
+        </Link>
+      )}
 
       <Suspense fallback={<Skeleton className="h-12 w-full" />}>
         <ExceptionsStrip />

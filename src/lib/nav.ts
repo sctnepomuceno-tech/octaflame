@@ -19,6 +19,7 @@ export const NAV_ICON_KEYS = [
   "calendarCheck",
   "history",
   "bell",
+  "target",
 ] as const;
 
 export type NavIconKey = (typeof NAV_ICON_KEYS)[number];
@@ -146,6 +147,7 @@ export const NAV_SECTIONS: NavSection[] = [
       { label: "Territories", href: "/settings/territories", icon: "mapPin", permission: "settings.manage" },
       { label: "Products", href: "/settings/products", icon: "packageSearch", permission: "products.manage" },
       { label: "Periods", href: "/settings/periods", icon: "calendarCheck", permission: "settings.manage" },
+      { label: "KPI Targets", href: "/settings/kpi-targets", icon: "target", permission: "settings.manage" },
       { label: "Audit log", href: "/settings/audit-log", icon: "history", permission: "audit.read" },
       { label: "Notifications", href: "/settings/notifications", icon: "bell", permission: "notifications.manage" },
     ],

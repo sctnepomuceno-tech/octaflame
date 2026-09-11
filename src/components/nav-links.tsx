@@ -17,6 +17,7 @@ import {
   Plus,
   Receipt,
   Route,
+  Target,
   Truck,
   Users,
   UsersRound,
@@ -46,6 +47,7 @@ const ICONS: Record<NavIconKey, LucideIcon> = {
   calendarCheck: CalendarCheck,
   history: History,
   bell: Bell,
+  target: Target,
 };
 
 export function NavLinks({

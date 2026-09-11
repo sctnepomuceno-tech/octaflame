@@ -126,6 +126,7 @@ export interface Database {
         Row: {
           id: string;
           year: number;
+          month: number | null;
           dsp_id: string | null;
           accounts_target: number;
           volume_target_mt: number;
@@ -758,6 +759,18 @@ export interface Database {
         Args: { p_year?: number };
         Returns: {
           year: number;
+          accounts_target: number;
+          volume_target_mt: number;
+          total_accounts: number;
+          total_volume_kg: number;
+          total_volume_mt: number;
+        }[];
+      };
+      company_kpi_progress_monthly: {
+        Args: { p_year?: number; p_month?: number };
+        Returns: {
+          year: number;
+          month: number;
           accounts_target: number;
           volume_target_mt: number;
           total_accounts: number;
