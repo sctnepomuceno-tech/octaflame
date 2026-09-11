@@ -21,7 +21,6 @@ import { CustomerStatusBadge } from "./customer-status-badge";
 
 export const metadata: Metadata = { title: "Customers" };
 
-const PAGE_SIZE = 50;
 const CUSTOMER_TYPES: CustomerType[] = ["HH", "RTL", "WS", "SD"];
 const CUSTOMER_STATUSES: CustomerStatus[] = [
   "prospect",
@@ -30,7 +29,15 @@ const CUSTOMER_STATUSES: CustomerStatus[] = [
   "dormant",
   "inactive",
 ];
-const SORTS = ["recent", "volume_desc", "volume_asc", "amount_desc"] as const;
+const SORTS = [
+  "recent",
+  "volume_desc",
+  "volume_asc",
+  "amount_desc",
+  "amount_asc",
+  "transactions_desc",
+  "name_asc",
+] as const;
 
 export default async function CustomersPage(props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
@@ -44,15 +51,24 @@ export default async function CustomersPage(props: {
   const status = CUSTOMER_STATUSES.find((s) => s === statusParam);
   const sortParam = typeof params.sort === "string" ? params.sort : "recent";
   const sort = SORTS.find((s) => s === sortParam) ?? "recent";
+  const municipalityParam = typeof params.municipality === "string" ? params.municipality : "all";
 
   const supabase = await createClient();
+
+  const { data: municipalities } = await supabase
+    .from("municipalities")
+    .select("id, name, dsp_id")
+    .eq("active", true)
+    .order("name");
+
+  const municipality = (municipalities ?? []).find((m) => m.id === municipalityParam)?.id;
 
   let query = supabase
     .from("customers")
     .select(
       "id, business_name, owner_name, customer_type, status, municipality_id, total_transactions, lifetime_volume_kg, lifetime_amount, notes"
     )
-    .limit(PAGE_SIZE);
+    .limit(1000);
 
   if (sort === "volume_desc") {
     query = query.order("lifetime_volume_kg", { ascending: false });
@@ -60,6 +76,12 @@ export default async function CustomersPage(props: {
     query = query.order("lifetime_volume_kg", { ascending: true });
   } else if (sort === "amount_desc") {
     query = query.order("lifetime_amount", { ascending: false });
+  } else if (sort === "amount_asc") {
+    query = query.order("lifetime_amount", { ascending: true });
+  } else if (sort === "transactions_desc") {
+    query = query.order("total_transactions", { ascending: false });
+  } else if (sort === "name_asc") {
+    query = query.order("business_name", { ascending: true });
   } else {
     query = query.order("created_at", { ascending: false });
   }
@@ -73,11 +95,11 @@ export default async function CustomersPage(props: {
   if (status) {
     query = query.eq("status", status);
   }
+  if (municipality) {
+    query = query.eq("municipality_id", municipality);
+  }
 
-  const [{ data: customers }, { data: municipalities }] = await Promise.all([
-    query,
-    supabase.from("municipalities").select("id, name, dsp_id").eq("active", true).order("name"),
-  ]);
+  const { data: customers } = await query;
 
   const municipalityNameById = new Map((municipalities ?? []).map((m) => [m.id, m.name]));
   const defaultMunicipalityId =
@@ -100,7 +122,7 @@ export default async function CustomersPage(props: {
         />
       </div>
 
-      <CustomerFilters />
+      <CustomerFilters municipalities={municipalities ?? []} />
 
       {/* Desktop table */}
       <Card className="hidden overflow-hidden py-0 md:block">

@@ -35,9 +35,16 @@ const SORTS = [
   { value: "volume_desc", label: "Volume: high to low" },
   { value: "volume_asc", label: "Volume: low to high" },
   { value: "amount_desc", label: "Amount: high to low" },
+  { value: "amount_asc", label: "Amount: low to high" },
+  { value: "transactions_desc", label: "Transactions: high to low" },
+  { value: "name_asc", label: "Name: A to Z" },
 ];
 
-export function CustomerFilters() {
+export function CustomerFilters({
+  municipalities = [],
+}: {
+  municipalities?: { id: string; name: string }[];
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -99,6 +106,24 @@ export function CustomerFilters() {
           ))}
         </SelectContent>
       </Select>
+      {municipalities.length > 0 ? (
+        <Select
+          defaultValue={searchParams.get("municipality") ?? "all"}
+          onValueChange={(v) => setParam("municipality", v)}
+        >
+          <SelectTrigger className="w-[180px]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All municipalities</SelectItem>
+            {municipalities.map((m) => (
+              <SelectItem key={m.id} value={m.id}>
+                {m.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      ) : null}
       <Select
         defaultValue={searchParams.get("sort") ?? "recent"}
         onValueChange={(v) => setParam("sort", v)}
