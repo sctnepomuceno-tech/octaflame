@@ -358,16 +358,20 @@ export default async function AnalyticsPage(props: {
             {heatmapRows.map((r) => {
               const intensity = Math.min(Math.abs(r.metricValue) / maxMetric, 1);
               const isNegative = r.metricValue < 0;
+              // Cells blend toward a solid, saturated color as intensity rises —
+              // default (near-black) text stops being readable past ~mid intensity,
+              // so switch to white text on darker cells instead of a fixed color.
+              const isDark = intensity >= 0.45;
               return (
                 <div
                   key={r.id}
-                  className="flex flex-col gap-1 rounded-md p-2 text-xs"
+                  className={`flex flex-col gap-1 rounded-md p-2 text-xs ${isDark ? "text-white" : "text-foreground"}`}
                   style={{
                     backgroundColor: `color-mix(in oklch, ${isNegative ? "var(--destructive)" : "var(--primary)"} ${Math.max(intensity * 100, 8)}%, var(--muted))`,
                   }}
                 >
                   <span className="truncate font-medium">{r.name}</span>
-                  <span className="tabular-nums text-muted-foreground">
+                  <span className={`tabular-nums ${isDark ? "text-white/80" : "text-muted-foreground"}`}>
                     {heatmapMetric === "volume"
                       ? formatKg(r.volume)
                       : heatmapMetric === "revenue"
