@@ -6,7 +6,8 @@ import { requirePermission } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { todayInManila, todayDateString } from "@/lib/dates";
 import { monthKey, addMonthsToKey, growthPct } from "@/lib/analytics";
-import { formatCount, formatCurrency, formatKg, formatPercent } from "@/lib/volume/format";
+import { kgToMt } from "@/lib/volume/calculations";
+import { formatCount, formatCurrency, formatKg, formatMt, formatPercent } from "@/lib/volume/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendChart } from "./sales-trend-chart";
@@ -21,6 +22,12 @@ const HEATMAP_METRICS = [
   { value: "growth", label: "Growth" },
 ] as const;
 type HeatmapMetric = (typeof HEATMAP_METRICS)[number]["value"];
+
+const OVERVIEW_METRICS = [
+  { value: "volume", label: "Volume (MT)" },
+  { value: "accounts", label: "New accounts" },
+] as const;
+type OverviewMetric = (typeof OVERVIEW_METRICS)[number]["value"];
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -70,6 +77,8 @@ export default async function AnalyticsPage(props: {
   const params = await props.searchParams;
   const heatmapMetric: HeatmapMetric =
     (HEATMAP_METRICS.find((m) => m.value === params.heatmap)?.value as HeatmapMetric) ?? "volume";
+  const overviewMetric: OverviewMetric =
+    (OVERVIEW_METRICS.find((m) => m.value === params.overview)?.value as OverviewMetric) ?? "volume";
 
   const supabase = await createClient();
   const today = todayDateString();
@@ -126,7 +135,7 @@ export default async function AnalyticsPage(props: {
   const trendData = trendMonths.map((k) => ({
     key: k,
     label: formatDate(new Date(`${k}-01T00:00:00`), "MMM"),
-    value: volumeByMonth.get(k) ?? 0,
+    value: kgToMt(volumeByMonth.get(k) ?? 0),
   }));
 
   // --- MoM / YoY growth ---------------------------------------------------------
@@ -199,6 +208,9 @@ export default async function AnalyticsPage(props: {
     running += acquisitionsByMonth.get(k) ?? 0;
     return { key: k, label: formatDate(new Date(`${k}-01T00:00:00`), "MMM"), value: running };
   });
+  const monthlyAccountsData = trendMonths.map((k) => {
+    return { key: k, label: formatDate(new Date(`${k}-01T00:00:00`), "MMM"), value: acquisitionsByMonth.get(k) ?? 0 };
+  });
 
   // --- Municipality heatmap -------------------------------------------------------
   const municipalityRevenue = new Map<string, number>();
@@ -256,11 +268,28 @@ export default async function AnalyticsPage(props: {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Volume trend</CardTitle>
+          <CardHeader className="flex flex-row items-center justify-between">
+            <CardTitle className="text-base">Monthly overview</CardTitle>
+            <div className="flex gap-1 rounded-lg bg-muted p-1">
+              {OVERVIEW_METRICS.map((m) => (
+                <Link
+                  key={m.value}
+                  href={`/analytics?overview=${m.value}`}
+                  className={`rounded-md px-2.5 py-1 text-xs font-medium ${
+                    m.value === overviewMetric ? "bg-background shadow-sm" : "text-muted-foreground"
+                  }`}
+                >
+                  {m.label}
+                </Link>
+              ))}
+            </div>
           </CardHeader>
           <CardContent>
-            <TrendChart data={trendData} formatValue={formatKg} />
+            {overviewMetric === "volume" ? (
+              <TrendChart data={trendData} formatValue={formatMt} />
+            ) : (
+              <TrendChart data={monthlyAccountsData} color="var(--accent)" formatValue={(v) => formatCount(v)} />
+            )}
           </CardContent>
         </Card>
 
