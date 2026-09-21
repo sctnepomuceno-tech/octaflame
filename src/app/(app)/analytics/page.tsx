@@ -358,10 +358,11 @@ export default async function AnalyticsPage(props: {
             {heatmapRows.map((r) => {
               const intensity = Math.min(Math.abs(r.metricValue) / maxMetric, 1);
               const isNegative = r.metricValue < 0;
-              // Cells blend toward a solid, saturated color as intensity rises —
-              // default (near-black) text stops being readable past ~mid intensity,
-              // so switch to white text on darker cells instead of a fixed color.
-              const isDark = intensity >= 0.45;
+              // --primary is a dark, low-lightness navy (brand blue), so cells
+              // blending toward it turn unreadable-with-black-text much sooner
+              // than the lighter --destructive red does — pair white text with
+              // blue cells earlier than red ones instead of one shared threshold.
+              const isDark = isNegative ? intensity >= 0.55 : intensity >= 0.25;
               return (
                 <div
                   key={r.id}
