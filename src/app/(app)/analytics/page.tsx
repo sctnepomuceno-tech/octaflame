@@ -7,7 +7,7 @@ import { createClient } from "@/lib/supabase/server";
 import { todayInManila, todayDateString } from "@/lib/dates";
 import { monthKey, addMonthsToKey, growthPct } from "@/lib/analytics";
 import { kgToMt } from "@/lib/volume/calculations";
-import { formatCount, formatCurrency, formatKg, formatMt, formatPercent } from "@/lib/volume/format";
+import { formatCount, formatCurrency, formatKg, formatPercent } from "@/lib/volume/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendChart } from "./sales-trend-chart";
@@ -286,9 +286,9 @@ export default async function AnalyticsPage(props: {
           </CardHeader>
           <CardContent>
             {overviewMetric === "volume" ? (
-              <TrendChart data={trendData} formatValue={formatMt} />
+              <TrendChart data={trendData} formatKind="mt" />
             ) : (
-              <TrendChart data={monthlyAccountsData} color="var(--accent)" formatValue={(v) => formatCount(v)} />
+              <TrendChart data={monthlyAccountsData} color="var(--accent)" formatKind="count" />
             )}
           </CardContent>
         </Card>
@@ -298,7 +298,7 @@ export default async function AnalyticsPage(props: {
             <CardTitle className="text-base">Customer acquisition (RTL + WS, cumulative)</CardTitle>
           </CardHeader>
           <CardContent>
-            <TrendChart data={acquisitionCurve} color="var(--accent)" formatValue={(v) => formatCount(v)} />
+            <TrendChart data={acquisitionCurve} color="var(--accent)" formatKind="count" />
           </CardContent>
         </Card>
       </div>

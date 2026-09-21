@@ -2,11 +2,21 @@
 
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
+import { formatCount, formatCurrency, formatKg, formatMt } from "@/lib/volume/format";
+
 export interface TrendPoint {
   key: string;
   label: string;
   value: number;
 }
+
+const FORMATTERS = {
+  mt: formatMt,
+  kg: formatKg,
+  count: formatCount,
+  currency: formatCurrency,
+} as const;
+export type TrendFormatKind = keyof typeof FORMATTERS;
 
 /**
  * A generic monthly trend line, used for both the volume trend and the
@@ -14,16 +24,21 @@ export interface TrendPoint {
  * below 768px a 12-point line chart is unreadable, so it's replaced with
  * a ranked list with inline bar fills — a better rendering, not a
  * degraded fallback (§16.2).
+ *
+ * formatKind is a plain string, not a function prop: Server Components
+ * can't pass function references across the client boundary (they aren't
+ * serializable), so the formatter is looked up here instead.
  */
 export function TrendChart({
   data,
   color = "var(--primary)",
-  formatValue,
+  formatKind,
 }: {
   data: TrendPoint[];
   color?: string;
-  formatValue: (value: number) => string;
+  formatKind: TrendFormatKind;
 }) {
+  const formatValue = FORMATTERS[formatKind];
   const max = Math.max(1, ...data.map((d) => d.value));
 
   return (
