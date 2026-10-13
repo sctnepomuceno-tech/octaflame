@@ -4,7 +4,7 @@ import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
 import { getVolumeConstants } from "@/lib/volume/constants";
-import { formatCount } from "@/lib/volume/format";
+import { formatCount, formatPcsAndCrates } from "@/lib/volume/format";
 import { computeKpiPace, accountsPaceSummary } from "@/lib/kpi";
 import { todayDateString, type Period } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
@@ -28,11 +28,6 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: "mtd", label: "MTD" },
   { value: "ytd", label: "YTD" },
 ];
-
-/** "36,000 pcs (1,500 crates)" — the two units the business actually tracks volume in now. */
-function formatPcsAndCrates(canisters: number, canistersPerCrate: number): string {
-  return `${formatCount(canisters)} pcs (${formatCount(canisters / canistersPerCrate)} crates)`;
-}
 
 function KpiCard({
   title,

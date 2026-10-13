@@ -27,6 +27,19 @@ export function formatCount(value: number): string {
   }).format(Math.round(value));
 }
 
+export function formatCanisters(canisters: number): string {
+  return `${formatCount(canisters)} pcs`;
+}
+
+export function formatCrates(crates: number): string {
+  return `${formatCount(crates)} crates`;
+}
+
+/** "36,000 pcs (1,500 crates)" — the two units volume is tracked in now. */
+export function formatPcsAndCrates(canisters: number, canistersPerCrate: number): string {
+  return `${formatCanisters(canisters)} (${formatCrates(canisters / canistersPerCrate)})`;
+}
+
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat(PH_LOCALE, {
     style: "currency",

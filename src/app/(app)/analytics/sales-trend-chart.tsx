@@ -2,7 +2,7 @@
 
 import { CartesianGrid, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
-import { formatCount, formatCurrency, formatKg, formatMt } from "@/lib/volume/format";
+import { formatCanisters, formatCount, formatCurrency, formatKg, formatMt } from "@/lib/volume/format";
 
 export interface TrendPoint {
   key: string;
@@ -13,6 +13,7 @@ export interface TrendPoint {
 const FORMATTERS = {
   mt: formatMt,
   kg: formatKg,
+  canisters: formatCanisters,
   count: formatCount,
   currency: formatCurrency,
 } as const;

@@ -4,10 +4,10 @@ import { subMonths, format as formatDate } from "date-fns";
 
 import { requirePermission } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
+import { getVolumeConstants } from "@/lib/volume/constants";
 import { todayInManila, todayDateString } from "@/lib/dates";
 import { monthKey, addMonthsToKey, growthPct } from "@/lib/analytics";
-import { kgToMt } from "@/lib/volume/calculations";
-import { formatCount, formatCurrency, formatKg, formatPercent } from "@/lib/volume/format";
+import { formatCanisters, formatCount, formatCurrency, formatPercent, formatPcsAndCrates } from "@/lib/volume/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendChart } from "./sales-trend-chart";
@@ -24,7 +24,7 @@ const HEATMAP_METRICS = [
 type HeatmapMetric = (typeof HEATMAP_METRICS)[number]["value"];
 
 const OVERVIEW_METRICS = [
-  { value: "volume", label: "Volume (MT)" },
+  { value: "volume", label: "Volume (pcs)" },
   { value: "accounts", label: "New accounts" },
 ] as const;
 type OverviewMetric = (typeof OVERVIEW_METRICS)[number]["value"];
@@ -81,6 +81,9 @@ export default async function AnalyticsPage(props: {
     (OVERVIEW_METRICS.find((m) => m.value === params.overview)?.value as OverviewMetric) ?? "volume";
 
   const supabase = await createClient();
+  const volumeConstants = await getVolumeConstants();
+  const kgPerCanister = volumeConstants.kgPerCanister;
+  const canistersPerCrate = volumeConstants.canistersPerCrate;
   const today = todayDateString();
   const trendStart = formatDate(subMonths(todayInManila(), TREND_MONTHS - 1), "yyyy-MM-01");
   const priorYearStart = formatDate(subMonths(todayInManila(), TREND_MONTHS - 1 + 12), "yyyy-MM-01");
@@ -135,7 +138,7 @@ export default async function AnalyticsPage(props: {
   const trendData = trendMonths.map((k) => ({
     key: k,
     label: formatDate(new Date(`${k}-01T00:00:00`), "MMM"),
-    value: kgToMt(volumeByMonth.get(k) ?? 0),
+    value: (volumeByMonth.get(k) ?? 0) / kgPerCanister,
   }));
 
   // --- MoM / YoY growth ---------------------------------------------------------
@@ -164,7 +167,7 @@ export default async function AnalyticsPage(props: {
     dspAgg.set(s.dsp_id, (dspAgg.get(s.dsp_id) ?? 0) + s.total_volume_kg);
   }
   const topMunicipalities = [...municipalityAgg.entries()]
-    .map(([id, v]) => ({ label: municipalityNameById.get(id) ?? "—", value: v }))
+    .map(([id, v]) => ({ label: municipalityNameById.get(id) ?? "—", value: v / kgPerCanister }))
     .sort((a, b) => b.value - a.value)
     .slice(0, 5);
   const topDsp = [...dspAgg.entries()].sort((a, b) => b[1] - a[1])[0];
@@ -286,7 +289,7 @@ export default async function AnalyticsPage(props: {
           </CardHeader>
           <CardContent>
             {overviewMetric === "volume" ? (
-              <TrendChart data={trendData} formatKind="mt" />
+              <TrendChart data={trendData} formatKind="canisters" />
             ) : (
               <TrendChart data={monthlyAccountsData} color="var(--accent)" formatKind="count" />
             )}
@@ -309,7 +312,7 @@ export default async function AnalyticsPage(props: {
             <CardTitle className="text-base">Top municipalities</CardTitle>
           </CardHeader>
           <CardContent>
-            <RankedList rows={topMunicipalities} formatValue={formatKg} />
+            <RankedList rows={topMunicipalities} formatValue={formatCanisters} />
           </CardContent>
         </Card>
 
@@ -319,7 +322,9 @@ export default async function AnalyticsPage(props: {
           </CardHeader>
           <CardContent className="flex flex-col gap-1">
             <div className="text-lg font-semibold">{topDsp ? dspNameById.get(topDsp[0]) : "—"}</div>
-            <div className="text-sm text-muted-foreground">{topDsp ? formatKg(topDsp[1]) : "No sales yet"}</div>
+            <div className="text-sm text-muted-foreground">
+              {topDsp ? formatPcsAndCrates(topDsp[1] / kgPerCanister, canistersPerCrate) : "No sales yet"}
+            </div>
             <p className="mt-2 text-xs text-muted-foreground">
               Deployments per DSP: ~{deploymentsPerDspPerWeek.toFixed(1)}/week
             </p>
@@ -374,7 +379,7 @@ export default async function AnalyticsPage(props: {
                   <span className="truncate font-medium">{r.name}</span>
                   <span className={`tabular-nums ${isDark ? "text-white/80" : "text-muted-foreground"}`}>
                     {heatmapMetric === "volume"
-                      ? formatKg(r.volume)
+                      ? formatCanisters(r.volume / kgPerCanister)
                       : heatmapMetric === "revenue"
                         ? formatCurrency(r.revenue)
                         : heatmapMetric === "accounts"
