@@ -128,16 +128,15 @@ export interface Database {
           year: number;
           month: number | null;
           dsp_id: string | null;
-          accounts_target: number;
-          volume_target_mt: number;
+          accounts_target: number | null;
+          volume_target_mt: number | null;
+          canisters_target: number | null;
           notes: string | null;
           created_at: string;
           updated_at: string;
         };
         Insert: Partial<Database["public"]["Tables"]["kpi_targets"]["Row"]> & {
           year: number;
-          accounts_target: number;
-          volume_target_mt: number;
         };
         Update: Partial<Database["public"]["Tables"]["kpi_targets"]["Row"]>;
         Relationships: [];
@@ -759,8 +758,9 @@ export interface Database {
         Args: { p_year?: number };
         Returns: {
           year: number;
-          accounts_target: number;
-          volume_target_mt: number;
+          accounts_target: number | null;
+          volume_target_mt: number | null;
+          canisters_target: number | null;
           total_accounts: number;
           total_volume_kg: number;
           total_volume_mt: number;
@@ -771,8 +771,9 @@ export interface Database {
         Returns: {
           year: number;
           month: number;
-          accounts_target: number;
-          volume_target_mt: number;
+          accounts_target: number | null;
+          volume_target_mt: number | null;
+          canisters_target: number | null;
           total_accounts: number;
           total_volume_kg: number;
           total_volume_mt: number;

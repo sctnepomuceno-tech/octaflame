@@ -1,4 +1,3 @@
-import { kgToMt } from "@/lib/volume/calculations";
 import type { ReportDefinition } from "./types";
 
 // ---------------------------------------------------------------------------
@@ -74,19 +73,21 @@ const dailySalesSummary: ReportDefinition<DailySalesRow> = {
 // ---------------------------------------------------------------------------
 interface MonthlyVolumeRow {
   month: string;
-  actualMt: number;
-  targetMt: number;
+  actualPcs: number;
+  targetPcs: number;
+  targetCrates: number;
   status: string;
 }
 
 const monthlyVolumeVsKpi: ReportDefinition<MonthlyVolumeRow> = {
   key: "monthly-volume-vs-kpi",
   label: "Monthly Volume vs KPI",
-  description: "Actual company volume against the pro-rated monthly target.",
+  description: "Actual company volume (canister pcs) against each month's own target.",
   columns: [
     { key: "month", header: "Month", value: (r) => r.month },
-    { key: "actualMt", header: "Actual (MT)", value: (r) => r.actualMt.toFixed(3), align: "right", numFmt: "#,##0.000" },
-    { key: "targetMt", header: "Target (MT)", value: (r) => r.targetMt.toFixed(3), align: "right", numFmt: "#,##0.000" },
+    { key: "actualPcs", header: "Actual (pcs)", value: (r) => r.actualPcs, align: "right", numFmt: "#,##0" },
+    { key: "targetPcs", header: "Target (pcs)", value: (r) => r.targetPcs, align: "right", numFmt: "#,##0" },
+    { key: "targetCrates", header: "Target (crates)", value: (r) => r.targetCrates, align: "right", numFmt: "#,##0" },
     { key: "status", header: "Status", value: (r) => r.status },
   ],
   async fetch(ctx) {
@@ -94,7 +95,7 @@ const monthlyVolumeVsKpi: ReportDefinition<MonthlyVolumeRow> = {
     const toYear = new Date(ctx.filters.to).getFullYear();
     const years = [...new Set([fromYear, toYear])];
 
-    const [{ data: sales }, { data: targets }] = await Promise.all([
+    const [{ data: sales }, { data: targets }, { data: settingsRows }] = await Promise.all([
       (async () => {
         let query = ctx.supabase
           .from("sales")
@@ -105,10 +106,22 @@ const monthlyVolumeVsKpi: ReportDefinition<MonthlyVolumeRow> = {
         if (ctx.scope.scope === "own" && ctx.scope.dspId) query = query.eq("dsp_id", ctx.scope.dspId);
         return query;
       })(),
-      ctx.supabase.from("kpi_targets").select("year, volume_target_mt").in("year", years).is("dsp_id", null),
+      ctx.supabase
+        .from("kpi_targets")
+        .select("year, month, canisters_target")
+        .in("year", years)
+        .is("dsp_id", null)
+        .not("month", "is", null),
+      ctx.supabase.from("settings").select("key, value").in("key", ["canisters_per_crate", "kg_per_canister"]),
     ]);
 
-    const targetByYear = new Map((targets ?? []).map((t) => [t.year, t.volume_target_mt]));
+    const settingByKey = new Map((settingsRows ?? []).map((s) => [s.key, s.value]));
+    const kgPerCanister = Number(settingByKey.get("kg_per_canister")) || 0.17;
+    const canistersPerCrate = Number(settingByKey.get("canisters_per_crate")) || 24;
+
+    const targetByMonth = new Map(
+      (targets ?? []).map((t) => [`${t.year}-${String(t.month).padStart(2, "0")}`, t.canisters_target ?? 0])
+    );
     const byMonth = new Map<string, number>();
     for (const s of sales ?? []) {
       const key = s.sale_date.slice(0, 7);
@@ -118,15 +131,14 @@ const monthlyVolumeVsKpi: ReportDefinition<MonthlyVolumeRow> = {
     const rows = [...byMonth.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([month, kg]) => {
-        const year = Number(month.slice(0, 4));
-        const yearTarget = targetByYear.get(year) ?? 14.45;
-        const monthlyTarget = yearTarget / 12;
-        const actualMt = kgToMt(kg);
+        const targetPcs = targetByMonth.get(month) ?? 0;
+        const actualPcs = Math.round(kg / kgPerCanister);
         return {
           month,
-          actualMt,
-          targetMt: monthlyTarget,
-          status: actualMt >= monthlyTarget ? "On track" : "Behind",
+          actualPcs,
+          targetPcs,
+          targetCrates: Math.round(targetPcs / canistersPerCrate),
+          status: targetPcs === 0 ? "No target set" : actualPcs >= targetPcs ? "On track" : "Behind",
         };
       });
 

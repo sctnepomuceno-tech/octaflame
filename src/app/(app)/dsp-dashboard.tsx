@@ -12,6 +12,7 @@ import {
   type Period,
 } from "@/lib/dates";
 import { kgToMt } from "@/lib/volume/calculations";
+import { getVolumeConstants } from "@/lib/volume/constants";
 import { formatCount, formatCurrency, formatKg, formatMt, formatPercent } from "@/lib/volume/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -126,6 +127,7 @@ export async function DspDashboard({
   const heatmapStart = daysAgoDateString(29);
   const weekEnd = formatDate(endOfWeek(todayInManila(), { weekStartsOn: 1 }), "yyyy-MM-dd");
   const year = new Date().getFullYear();
+  const volumeConstants = await getVolumeConstants();
 
   const [
     { data: periodSales },
@@ -221,10 +223,11 @@ export async function DspDashboard({
     (ownYearSales ?? []).filter((s) => s.customer_type !== "HH").map((s) => s.customer_id)
   ).size;
 
-  const companyVolumeMt = kpi ? kgToMt(kpi.total_volume_kg) : 0;
-  const targetMt = kpi?.volume_target_mt ?? 14.45;
-  const companyPct = Math.min(companyVolumeMt / targetMt, 1);
-  const ownPct = Math.min(kgToMt(ownVolumeKg) / targetMt, 1);
+  const companyCanisters = kpi ? kpi.total_volume_kg / volumeConstants.kgPerCanister : 0;
+  const canistersTarget = kpi?.canisters_target ?? null;
+  const companyPct = canistersTarget ? Math.min(companyCanisters / canistersTarget, 1) : 0;
+  const ownCanisters = ownVolumeKg / volumeConstants.kgPerCanister;
+  const ownPct = canistersTarget ? Math.min(ownCanisters / canistersTarget, 1) : 0;
 
   const heatmapByDate = new Map<string, number>();
   for (const s of heatmapSales ?? []) {
@@ -353,7 +356,9 @@ export async function DspDashboard({
             <div className="mb-1 flex justify-between text-sm">
               <span>Volume</span>
               <span className="tabular-nums text-muted-foreground">
-                {formatMt(companyVolumeMt)} / {formatMt(targetMt)} · {formatPercent(companyPct)}
+                {canistersTarget
+                  ? `${formatCount(companyCanisters)} / ${formatCount(canistersTarget)} pcs (${formatCount(canistersTarget / volumeConstants.canistersPerCrate)} crates) · ${formatPercent(companyPct)}`
+                  : "No target set yet this year"}
               </span>
             </div>
             <div className="relative h-3 overflow-hidden rounded-full bg-muted">
@@ -361,20 +366,20 @@ export async function DspDashboard({
               <div className="absolute inset-y-0 left-0 bg-primary" style={{ width: `${ownPct * 100}%` }} />
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Your contribution: {formatMt(kgToMt(ownVolumeKg))} ({formatCount(ownAccounts)} accounts this year)
+              Your contribution: {formatCount(ownCanisters)} pcs ({formatCount(ownAccounts)} accounts this year)
             </p>
           </div>
           <div>
             <div className="mb-1 flex justify-between text-sm">
               <span>Accounts</span>
               <span className="tabular-nums text-muted-foreground">
-                {kpi?.total_accounts ?? 0} / {kpi?.accounts_target ?? 300}
+                {kpi?.total_accounts ?? 0} / {kpi?.accounts_target ?? 500}
               </span>
             </div>
             <div className="h-3 overflow-hidden rounded-full bg-muted">
               <div
                 className="h-full bg-accent"
-                style={{ width: `${Math.min((kpi?.total_accounts ?? 0) / (kpi?.accounts_target ?? 300), 1) * 100}%` }}
+                style={{ width: `${Math.min((kpi?.total_accounts ?? 0) / (kpi?.accounts_target ?? 500), 1) * 100}%` }}
               />
             </div>
           </div>

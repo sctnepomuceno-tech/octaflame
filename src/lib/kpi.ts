@@ -47,26 +47,6 @@ export function computeKpiPace(actual: number, target: number, asOf: Date = new 
   return { progressPct, expectedPct, paceStatus, forecast, requiredPerMonth, monthsRemaining };
 }
 
-/** e.g. "On pace for 11.8 MT — 2.65 MT behind target. Needs 662 crates/month for the remaining 4 months." */
-export function volumePaceSummary(
-  pace: KpiPace,
-  target: number,
-  requiredCratesPerMonth: number,
-  formatMt: (mt: number) => string
-): string {
-  const gap = Math.abs(target - pace.forecast);
-  const status =
-    pace.paceStatus === "on_track"
-      ? `On pace for ${formatMt(pace.forecast)} — ahead of target.`
-      : `On pace for ${formatMt(pace.forecast)} — ${formatMt(gap)} behind target.`;
-
-  if (pace.paceStatus === "on_track") {
-    return status;
-  }
-
-  return `${status} Needs ${Math.ceil(requiredCratesPerMonth).toLocaleString()} crates/month for the remaining ${pace.monthsRemaining} month${pace.monthsRemaining === 1 ? "" : "s"}.`;
-}
-
 export function accountsPaceSummary(pace: KpiPace): string {
   const roundedForecast = Math.round(pace.forecast);
   if (pace.paceStatus === "on_track") {

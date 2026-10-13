@@ -3,10 +3,9 @@ import Link from "next/link";
 import { AlertTriangle, CheckCircle2 } from "lucide-react";
 
 import { createClient } from "@/lib/supabase/server";
-import { kgToMt } from "@/lib/volume/calculations";
 import { getVolumeConstants } from "@/lib/volume/constants";
-import { formatCount, formatMt } from "@/lib/volume/format";
-import { computeKpiPace, volumePaceSummary, accountsPaceSummary } from "@/lib/kpi";
+import { formatCount } from "@/lib/volume/format";
+import { computeKpiPace, accountsPaceSummary } from "@/lib/kpi";
 import { todayDateString, type Period } from "@/lib/dates";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
@@ -30,49 +29,43 @@ const PERIODS: { value: Period; label: string }[] = [
   { value: "ytd", label: "YTD" },
 ];
 
+/** "36,000 pcs (1,500 crates)" — the two units the business actually tracks volume in now. */
+function formatPcsAndCrates(canisters: number, canistersPerCrate: number): string {
+  return `${formatCount(canisters)} pcs (${formatCount(canisters / canistersPerCrate)} crates)`;
+}
+
 function KpiCard({
   title,
   actual,
-  target,
-  format,
   targetLabel,
   summary,
-  paceOverride,
+  progressPct,
+  onTrack,
 }: {
   title: string;
   actual: number;
-  target: number;
-  format: "count" | "mt";
   targetLabel: string;
   summary: string;
-  /** Override pace status/progress for non-annual targets (computeKpiPace assumes a full-year cycle). */
-  paceOverride?: { progressPct: number; onTrack: boolean };
+  progressPct: number;
+  onTrack: boolean;
 }) {
-  const pace = paceOverride
-    ? { progressPct: paceOverride.progressPct, paceStatus: paceOverride.onTrack ? "on_track" as const : "behind" as const }
-    : computeKpiPace(actual, target);
-  const pct = Math.min(pace.progressPct, 1);
+  const pct = Math.min(progressPct, 1);
 
   return (
     <Card className="p-6">
       <CardContent className="flex flex-col gap-3 p-0">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium text-muted-foreground">{title}</span>
-          <Badge variant={pace.paceStatus === "on_track" ? "success" : "warning"}>
-            {pace.paceStatus === "on_track" ? "On track" : "Behind"}
-          </Badge>
+          <Badge variant={onTrack ? "success" : "warning"}>{onTrack ? "On track" : "Behind"}</Badge>
         </div>
         <div className="flex items-baseline gap-2">
           <span className="text-4xl font-bold tabular-nums">
-            <AnimatedNumber value={actual} format={format} />
+            <AnimatedNumber value={actual} format="count" />
           </span>
           <span className="text-lg text-muted-foreground">/ {targetLabel}</span>
         </div>
         <div className="h-2.5 overflow-hidden rounded-full bg-muted">
-          <div
-            className={pace.paceStatus === "on_track" ? "h-full bg-success" : "h-full bg-warning"}
-            style={{ width: `${pct * 100}%` }}
-          />
+          <div className={onTrack ? "h-full bg-success" : "h-full bg-warning"} style={{ width: `${pct * 100}%` }} />
         </div>
         <p className="text-sm text-muted-foreground">{summary}</p>
       </CardContent>
@@ -170,24 +163,59 @@ function daysInMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
-/** Monthly targets pace over a single month, not the annual cycle computeKpiPace assumes. */
-function monthlyPaceSummary(actual: number, target: number, year: number, month: number, unit: string): string {
-  const totalDays = daysInMonth(year, month);
-  const now = new Date();
-  const isCurrentMonth = now.getFullYear() === year && now.getMonth() + 1 === month;
-  const dayOfMonth = isCurrentMonth ? now.getDate() : totalDays;
-  const expectedPct = dayOfMonth / totalDays;
-  const progressPct = target > 0 ? actual / target : 0;
-  const daysLeft = Math.max(0, totalDays - dayOfMonth);
+/** Monday-start weeks (matches periodStartDate's "wtd") whose Monday falls in that month. */
+function mondaysInMonth(year: number, month: number): number {
+  let count = 0;
+  const last = daysInMonth(year, month);
+  for (let day = 1; day <= last; day++) {
+    if (new Date(Date.UTC(year, month - 1, day)).getUTCDay() === 1) count++;
+  }
+  return Math.max(1, count);
+}
 
-  if (progressPct >= expectedPct) {
-    return daysLeft > 0
-      ? `On pace — ${daysLeft} day${daysLeft === 1 ? "" : "s"} left this month.`
-      : "Month complete.";
+function mondayOfWeek(date: Date): Date {
+  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+  const dow = d.getUTCDay();
+  const diff = dow === 0 ? -6 : 1 - dow;
+  d.setUTCDate(d.getUTCDate() + diff);
+  return d;
+}
+
+function toDateString(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
+/** Pace over a window of `totalUnits` days (a month or a week), not computeKpiPace's annual cycle. */
+function windowPaceSummary(
+  actual: number,
+  target: number,
+  unitsElapsed: number,
+  totalUnits: number,
+  unitLabel: string,
+  perUnit: string
+): { summary: string; progressPct: number; onTrack: boolean } {
+  const expectedPct = unitsElapsed / totalUnits;
+  const progressPct = target > 0 ? actual / target : 0;
+  const onTrack = progressPct >= expectedPct;
+  const unitsLeft = Math.max(0, totalUnits - unitsElapsed);
+
+  if (onTrack) {
+    return {
+      progressPct,
+      onTrack,
+      summary:
+        unitsLeft > 0
+          ? `On pace — ${unitsLeft} ${unitLabel}${unitsLeft === 1 ? "" : "s"} left.`
+          : "Window complete.",
+    };
   }
   const remaining = Math.max(0, target - actual);
-  const perDay = daysLeft > 0 ? remaining / daysLeft : remaining;
-  return `Behind pace — needs ~${perDay.toLocaleString(undefined, { maximumFractionDigits: 2 })} ${unit}/day for the remaining ${daysLeft} day${daysLeft === 1 ? "" : "s"}.`;
+  const perUnitNeeded = unitsLeft > 0 ? remaining / unitsLeft : remaining;
+  return {
+    progressPct,
+    onTrack,
+    summary: `Behind pace — needs ~${Math.ceil(perUnitNeeded).toLocaleString()} ${perUnit} for the remaining ${unitsLeft} ${unitLabel}${unitsLeft === 1 ? "" : "s"}.`,
+  };
 }
 
 function Tier2Skeleton() {
@@ -202,27 +230,61 @@ function Tier2Skeleton() {
 export async function ManagementDashboard({ period }: { period: Period }) {
   const supabase = await createClient();
   const volumeConstants = await getVolumeConstants();
+  const canistersPerCrate = volumeConstants.canistersPerCrate;
 
-  const [{ data: kpiRows }, { data: monthlyRows }] = await Promise.all([
+  const now = new Date();
+  const weekStart = mondayOfWeek(now);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setUTCDate(weekEnd.getUTCDate() + 6);
+  const weekOwnerMonth = weekStart.getUTCMonth() + 1;
+  const weekOwnerYear = weekStart.getUTCFullYear();
+  const dayOfWeek1to7 = now.getUTCDay() === 0 ? 7 : now.getUTCDay();
+
+  const [{ data: kpiRows }, { data: monthlyRows }, { data: weekSales }] = await Promise.all([
     supabase.rpc("company_kpi_progress", { p_year: CURRENT_YEAR }),
     supabase.rpc("company_kpi_progress_monthly", { p_year: CURRENT_YEAR, p_month: CURRENT_MONTH }),
+    supabase
+      .from("sales")
+      .select("total_volume_kg")
+      .gte("sale_date", toDateString(weekStart))
+      .lte("sale_date", toDateString(weekEnd))
+      .is("deleted_at", null),
   ]);
   const kpi = kpiRows?.[0];
   const monthlyKpi = monthlyRows?.[0];
 
-  const accountsTarget = kpi?.accounts_target ?? 300;
-  const volumeTargetMt = kpi?.volume_target_mt ?? 14.45;
+  const accountsTarget = kpi?.accounts_target ?? 500;
   const totalAccounts = kpi?.total_accounts ?? 0;
-  const totalVolumeMt = kpi ? kgToMt(kpi.total_volume_kg) : 0;
-
   const accountsPace = computeKpiPace(totalAccounts, accountsTarget);
-  const volumePace = computeKpiPace(totalVolumeMt, volumeTargetMt);
-  const requiredKgPerMonth = volumePace.requiredPerMonth * 1000;
-  const requiredCratesPerMonth =
-    requiredKgPerMonth / (volumeConstants.kgPerCanister * volumeConstants.canistersPerCrate);
 
-  const monthlyVolumeMt = monthlyKpi ? kgToMt(monthlyKpi.total_volume_kg) : 0;
+  const annualCanistersTarget = kpi?.canisters_target ?? null;
+  const annualCanistersActual = kpi ? kpi.total_volume_kg / volumeConstants.kgPerCanister : 0;
+
   const monthName = MONTH_NAMES[CURRENT_MONTH - 1];
+  const monthlyCanistersTarget = monthlyKpi?.canisters_target ?? null;
+  const monthlyCanistersActual = monthlyKpi ? monthlyKpi.total_volume_kg / volumeConstants.kgPerCanister : 0;
+  const monthlyPace = monthlyCanistersTarget
+    ? windowPaceSummary(
+        monthlyCanistersActual,
+        monthlyCanistersTarget,
+        now.getUTCDate(),
+        daysInMonth(CURRENT_YEAR, CURRENT_MONTH),
+        "day",
+        "pcs/day"
+      )
+    : null;
+
+  const weekCanistersActual = (weekSales ?? []).reduce((sum, s) => sum + s.total_volume_kg, 0) / volumeConstants.kgPerCanister;
+  // The week's target rides on whichever month owns its Monday — if that
+  // month has no target set, there's nothing to show a weekly card against.
+  const weekMonthlyTarget =
+    weekOwnerYear === CURRENT_YEAR && weekOwnerMonth === CURRENT_MONTH ? monthlyCanistersTarget : null;
+  const weeklyCanistersTarget = weekMonthlyTarget
+    ? weekMonthlyTarget / mondaysInMonth(weekOwnerYear, weekOwnerMonth)
+    : null;
+  const weeklyPace = weeklyCanistersTarget
+    ? windowPaceSummary(weekCanistersActual, weeklyCanistersTarget, dayOfWeek1to7, 7, "day", "pcs/day")
+    : null;
 
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
@@ -231,82 +293,85 @@ export async function ManagementDashboard({ period }: { period: Period }) {
         <p className="text-sm text-muted-foreground">Are we on track? What needs me today?</p>
       </div>
 
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-base font-semibold">{CURRENT_YEAR} overview</h2>
+        <Link href="/settings/kpi-targets" className="text-xs text-muted-foreground hover:underline">
+          Edit KPI targets
+        </Link>
+      </div>
       <StaggerGrid className="grid gap-4 sm:grid-cols-2">
         <StaggerItem>
           <KpiCard
             title="Unique RTL + WS accounts"
             actual={totalAccounts}
-            target={accountsTarget}
-            format="count"
             targetLabel={formatCount(accountsTarget)}
             summary={accountsPaceSummary(accountsPace)}
+            progressPct={accountsPace.progressPct}
+            onTrack={accountsPace.paceStatus === "on_track"}
           />
         </StaggerItem>
         <StaggerItem>
-          <KpiCard
-            title="Volume"
-            actual={totalVolumeMt}
-            target={volumeTargetMt}
-            format="mt"
-            targetLabel={formatMt(volumeTargetMt)}
-            summary={volumePaceSummary(volumePace, volumeTargetMt, requiredCratesPerMonth, formatMt)}
-          />
+          <Card className="p-6">
+            <CardContent className="flex flex-col gap-2 p-0">
+              <span className="text-sm font-medium text-muted-foreground">Volume (year to date)</span>
+              <span className="text-2xl font-bold tabular-nums">
+                {formatPcsAndCrates(annualCanistersActual, canistersPerCrate)}
+              </span>
+              <p className="text-sm text-muted-foreground">
+                {annualCanistersTarget
+                  ? `Against ${formatPcsAndCrates(annualCanistersTarget, canistersPerCrate)} summed from this year's monthly targets.`
+                  : "No monthly targets set yet this year — set them in KPI Targets."}
+              </p>
+            </CardContent>
+          </Card>
         </StaggerItem>
       </StaggerGrid>
 
-      {monthlyKpi ? (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <h2 className="text-base font-semibold">{monthName} target</h2>
-            <Link href="/settings/kpi-targets" className="text-xs text-muted-foreground hover:underline">
-              Edit KPI targets
-            </Link>
-          </div>
-          <StaggerGrid className="grid gap-4 sm:grid-cols-2">
-            <StaggerItem>
-              <KpiCard
-                title={`${monthName} accounts`}
-                actual={monthlyKpi.total_accounts}
-                target={monthlyKpi.accounts_target}
-                format="count"
-                targetLabel={formatCount(monthlyKpi.accounts_target)}
-                summary={monthlyPaceSummary(
-                  monthlyKpi.total_accounts,
-                  monthlyKpi.accounts_target,
-                  CURRENT_YEAR,
-                  CURRENT_MONTH,
-                  "accounts"
-                )}
-                paceOverride={{
-                  progressPct: monthlyKpi.accounts_target > 0 ? monthlyKpi.total_accounts / monthlyKpi.accounts_target : 0,
-                  onTrack: monthlyKpi.total_accounts >= monthlyKpi.accounts_target * (new Date().getDate() / daysInMonth(CURRENT_YEAR, CURRENT_MONTH)),
-                }}
-              />
-            </StaggerItem>
-            <StaggerItem>
-              <KpiCard
-                title={`${monthName} volume`}
-                actual={monthlyVolumeMt}
-                target={monthlyKpi.volume_target_mt}
-                format="mt"
-                targetLabel={formatMt(monthlyKpi.volume_target_mt)}
-                summary={monthlyPaceSummary(monthlyVolumeMt, monthlyKpi.volume_target_mt, CURRENT_YEAR, CURRENT_MONTH, "MT")}
-                paceOverride={{
-                  progressPct: monthlyKpi.volume_target_mt > 0 ? monthlyVolumeMt / monthlyKpi.volume_target_mt : 0,
-                  onTrack: monthlyVolumeMt >= monthlyKpi.volume_target_mt * (new Date().getDate() / daysInMonth(CURRENT_YEAR, CURRENT_MONTH)),
-                }}
-              />
-            </StaggerItem>
-          </StaggerGrid>
-        </div>
-      ) : (
-        <Link
-          href="/settings/kpi-targets"
-          className="text-xs text-muted-foreground hover:underline"
-        >
-          Set a target for {monthName} to see this month&apos;s KPI here →
-        </Link>
-      )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <h2 className="text-base font-semibold">Volume targets</h2>
+      </div>
+      <StaggerGrid className="grid gap-4 sm:grid-cols-2">
+        <StaggerItem>
+          {monthlyPace ? (
+            <KpiCard
+              title={`${monthName} (this month)`}
+              actual={monthlyCanistersActual}
+              targetLabel={formatPcsAndCrates(monthlyCanistersTarget!, canistersPerCrate)}
+              summary={monthlyPace.summary}
+              progressPct={monthlyPace.progressPct}
+              onTrack={monthlyPace.onTrack}
+            />
+          ) : (
+            <Card className="p-6">
+              <CardContent className="p-0 text-sm text-muted-foreground">
+                No target set for {monthName} yet.{" "}
+                <Link href="/settings/kpi-targets" className="underline">
+                  Set one →
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+        </StaggerItem>
+        <StaggerItem>
+          {weeklyPace ? (
+            <KpiCard
+              title="This week (Mon–Sun)"
+              actual={weekCanistersActual}
+              targetLabel={formatPcsAndCrates(weeklyCanistersTarget!, canistersPerCrate)}
+              summary={weeklyPace.summary}
+              progressPct={weeklyPace.progressPct}
+              onTrack={weeklyPace.onTrack}
+            />
+          ) : (
+            <Card className="p-6">
+              <CardContent className="p-0 text-sm text-muted-foreground">
+                No target set for this week — set {monthName}&apos;s monthly target and the week
+                splits evenly from it.
+              </CardContent>
+            </Card>
+          )}
+        </StaggerItem>
+      </StaggerGrid>
 
       <Suspense fallback={<Skeleton className="h-12 w-full" />}>
         <ExceptionsStrip />
