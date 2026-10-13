@@ -3,7 +3,7 @@ import Link from "next/link";
 
 import { requireAnyPermission, profileHasPermission } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
-import { formatCurrency, formatKg } from "@/lib/volume";
+import { formatCanisters, formatCrates, formatCurrency, getVolumeConstants } from "@/lib/volume";
 import type { CustomerType, PaymentStatus } from "@/lib/supabase/database.types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,7 @@ export default async function SalesPage(props: {
   const canSeeAll = profileHasPermission(profile, "sales.read.all");
 
   const supabase = await createClient();
+  const { kgPerCanister, canistersPerCrate } = await getVolumeConstants();
 
   let query = supabase
     .from("sales")
@@ -97,36 +98,43 @@ export default async function SalesPage(props: {
               <TableHead>Customer</TableHead>
               <TableHead>Municipality</TableHead>
               <TableHead>Payment</TableHead>
-              <TableHead className="text-right">Volume</TableHead>
+              <TableHead className="text-right">Crates</TableHead>
+              <TableHead className="text-right">Canister pcs</TableHead>
               <TableHead className="text-right">Amount</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {(sales ?? []).map((s) => (
-              <TableRow key={s.id}>
-                <TableCell className="whitespace-nowrap">{s.sale_date}</TableCell>
-                <TableCell>
-                  <Link href={`/sales/${s.id}`} className="font-medium hover:underline">
-                    {s.receipt_no}
-                  </Link>
-                  {s.notes ? <span className="ml-1.5 text-muted-foreground">•</span> : null}
-                </TableCell>
-                <TableCell>{customerLabelById.get(s.customer_id) ?? "—"}</TableCell>
-                <TableCell className="text-muted-foreground">
-                  {municipalityNameById.get(s.municipality_id) ?? "—"}
-                </TableCell>
-                <TableCell>
-                  <Badge variant={PAYMENT_VARIANT[s.payment_status]} className="capitalize">
-                    {s.payment_status}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{formatKg(s.total_volume_kg)}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatCurrency(s.total_amount)}</TableCell>
-              </TableRow>
-            ))}
+            {(sales ?? []).map((s) => {
+              const canisters = s.total_volume_kg / kgPerCanister;
+              return (
+                <TableRow key={s.id}>
+                  <TableCell className="whitespace-nowrap">{s.sale_date}</TableCell>
+                  <TableCell>
+                    <Link href={`/sales/${s.id}`} className="font-medium hover:underline">
+                      {s.receipt_no}
+                    </Link>
+                    {s.notes ? <span className="ml-1.5 text-muted-foreground">•</span> : null}
+                  </TableCell>
+                  <TableCell>{customerLabelById.get(s.customer_id) ?? "—"}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {municipalityNameById.get(s.municipality_id) ?? "—"}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant={PAYMENT_VARIANT[s.payment_status]} className="capitalize">
+                      {s.payment_status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    {formatCrates(canisters / canistersPerCrate)}
+                  </TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCanisters(canisters)}</TableCell>
+                  <TableCell className="text-right tabular-nums">{formatCurrency(s.total_amount)}</TableCell>
+                </TableRow>
+              );
+            })}
             {(sales ?? []).length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="py-10 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="py-10 text-center text-muted-foreground">
                   No sales match these filters.
                 </TableCell>
               </TableRow>
@@ -137,28 +145,34 @@ export default async function SalesPage(props: {
 
       {/* Mobile cards (§16.2) */}
       <div className="flex flex-col gap-2 md:hidden">
-        {(sales ?? []).map((s) => (
-          <Link key={s.id} href={`/sales/${s.id}`}>
-            <Card className="p-4">
-              <CardContent className="flex flex-col gap-1 p-0">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-medium">{customerLabelById.get(s.customer_id) ?? "—"}</span>
-                  <Badge variant={PAYMENT_VARIANT[s.payment_status]} className="capitalize">
-                    {s.payment_status}
-                  </Badge>
-                </div>
-                <div className="flex items-center justify-between text-sm text-muted-foreground">
-                  <span>{s.sale_date}</span>
-                  <span>{s.receipt_no}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="tabular-nums text-muted-foreground">{formatKg(s.total_volume_kg)}</span>
-                  <span className="tabular-nums font-medium">{formatCurrency(s.total_amount)}</span>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+        {(sales ?? []).map((s) => {
+          const canisters = s.total_volume_kg / kgPerCanister;
+          return (
+            <Link key={s.id} href={`/sales/${s.id}`}>
+              <Card className="p-4">
+                <CardContent className="flex flex-col gap-1 p-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">{customerLabelById.get(s.customer_id) ?? "—"}</span>
+                    <Badge variant={PAYMENT_VARIANT[s.payment_status]} className="capitalize">
+                      {s.payment_status}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                    <span>{s.sale_date}</span>
+                    <span>{s.receipt_no}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm text-muted-foreground">
+                    <span className="tabular-nums">{formatCrates(canisters / canistersPerCrate)}</span>
+                    <span className="tabular-nums">{formatCanisters(canisters)}</span>
+                  </div>
+                  <div className="flex items-center justify-end text-sm">
+                    <span className="tabular-nums font-medium">{formatCurrency(s.total_amount)}</span>
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          );
+        })}
         {(sales ?? []).length === 0 ? (
           <p className="py-10 text-center text-muted-foreground">No sales match these filters.</p>
         ) : null}
