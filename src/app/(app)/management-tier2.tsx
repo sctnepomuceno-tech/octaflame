@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { periodStartDate, todayDateString, monthRange, type Period } from "@/lib/dates";
 import { monthKey } from "@/lib/analytics";
-import { formatCount, formatCurrency, formatKg, formatPercent } from "@/lib/volume/format";
+import { formatCanisters, formatCount, formatCurrency, formatPercent } from "@/lib/volume/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -30,7 +30,7 @@ export async function ManagementTier2({ period, month }: { period: Period; month
     await Promise.all([
       supabase
         .from("sales")
-        .select("dsp_id, municipality_id, customer_id, customer_type, total_amount, total_canisters, total_volume_kg, is_repeat_purchase")
+        .select("dsp_id, municipality_id, customer_id, customer_type, total_amount, total_canisters, is_repeat_purchase")
         .gte("sale_date", start)
         .lte("sale_date", end),
       supabase.from("dsps").select("id, name").eq("active", true).order("name"),
@@ -45,12 +45,11 @@ export async function ManagementTier2({ period, month }: { period: Period; month
   const rows = sales ?? [];
   const totalAmount = rows.reduce((s, r) => s + r.total_amount, 0);
   const totalCanisters = rows.reduce((s, r) => s + r.total_canisters, 0);
-  const totalVolumeKg = rows.reduce((s, r) => s + r.total_volume_kg, 0);
 
   interface DspAgg {
     id: string;
     name: string;
-    volumeKg: number;
+    canisters: number;
     revenue: number;
     accounts: Set<string>;
     newAccounts: number;
@@ -65,7 +64,7 @@ export async function ManagementTier2({ period, month }: { period: Period; month
     dspAggById.set(dsp.id, {
       id: dsp.id,
       name: dsp.name,
-      volumeKg: 0,
+      canisters: 0,
       revenue: 0,
       accounts: new Set(),
       newAccounts: 0,
@@ -76,15 +75,15 @@ export async function ManagementTier2({ period, month }: { period: Period; month
     });
   }
 
-  const municipalityAgg = new Map<string, { name: string; volumeKg: number; revenue: number }>();
+  const municipalityAgg = new Map<string, { name: string; canisters: number; revenue: number }>();
   for (const m of municipalities ?? []) {
-    municipalityAgg.set(m.id, { name: m.name, volumeKg: 0, revenue: 0 });
+    municipalityAgg.set(m.id, { name: m.name, canisters: 0, revenue: 0 });
   }
 
   for (const s of rows) {
     const dspAgg = dspAggById.get(s.dsp_id);
     if (dspAgg) {
-      dspAgg.volumeKg += s.total_volume_kg;
+      dspAgg.canisters += s.total_canisters;
       dspAgg.revenue += s.total_amount;
       dspAgg.transactions += 1;
       if (s.customer_type !== "HH") dspAgg.accounts.add(s.customer_id);
@@ -92,7 +91,7 @@ export async function ManagementTier2({ period, month }: { period: Period; month
     }
     const munAgg = municipalityAgg.get(s.municipality_id);
     if (munAgg) {
-      munAgg.volumeKg += s.total_volume_kg;
+      munAgg.canisters += s.total_canisters;
       munAgg.revenue += s.total_amount;
     }
   }
@@ -125,8 +124,8 @@ export async function ManagementTier2({ period, month }: { period: Period; month
     }
   }
 
-  const leaderboard = [...dspAggById.values()].sort((a, b) => b.volumeKg - a.volumeKg);
-  const municipalityRanking = [...municipalityAgg.values()].sort((a, b) => b.volumeKg - a.volumeKg);
+  const leaderboard = [...dspAggById.values()].sort((a, b) => b.canisters - a.canisters);
+  const municipalityRanking = [...municipalityAgg.values()].sort((a, b) => b.canisters - a.canisters);
   const bottomThreeNames = new Set(
     municipalityRanking.slice(-3).map((m) => m.name)
   );
@@ -142,13 +141,7 @@ export async function ManagementTier2({ period, month }: { period: Period; month
         </Card>
         <Card className="p-4">
           <CardContent className="p-0">
-            <div className="text-xs text-muted-foreground">Volume</div>
-            <div className="text-2xl font-semibold tabular-nums">{formatKg(totalVolumeKg)}</div>
-          </CardContent>
-        </Card>
-        <Card className="p-4">
-          <CardContent className="p-0">
-            <div className="text-xs text-muted-foreground">Canisters</div>
+            <div className="text-xs text-muted-foreground">Canister pcs</div>
             <div className="text-2xl font-semibold tabular-nums">{formatCount(totalCanisters)}</div>
           </CardContent>
         </Card>
@@ -168,7 +161,7 @@ export async function ManagementTier2({ period, month }: { period: Period; month
           <TableHeader>
             <TableRow>
               <TableHead>DSP</TableHead>
-              <TableHead className="text-right">Volume</TableHead>
+              <TableHead className="text-right">Canister pcs</TableHead>
               <TableHead className="text-right">Revenue</TableHead>
               <TableHead className="text-right">Accounts</TableHead>
               <TableHead className="text-right">New accounts</TableHead>
@@ -181,7 +174,7 @@ export async function ManagementTier2({ period, month }: { period: Period; month
             {leaderboard.map((dsp) => (
               <TableRow key={dsp.id}>
                 <TableCell className="font-medium">{dsp.name}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatKg(dsp.volumeKg)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatCanisters(dsp.canisters)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatCurrency(dsp.revenue)}</TableCell>
                 <TableCell className="text-right tabular-nums">{dsp.accounts.size}</TableCell>
                 <TableCell className="text-right tabular-nums">{dsp.newAccounts}</TableCell>
@@ -212,7 +205,7 @@ export async function ManagementTier2({ period, month }: { period: Period; month
           <TableHeader>
             <TableRow>
               <TableHead>Municipality</TableHead>
-              <TableHead className="text-right">Volume</TableHead>
+              <TableHead className="text-right">Canister pcs</TableHead>
               <TableHead className="text-right">Revenue</TableHead>
             </TableRow>
           </TableHeader>
@@ -227,7 +220,7 @@ export async function ManagementTier2({ period, month }: { period: Period; month
                     </Badge>
                   ) : null}
                 </TableCell>
-                <TableCell className="text-right tabular-nums">{formatKg(m.volumeKg)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatCanisters(m.canisters)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatCurrency(m.revenue)}</TableCell>
               </TableRow>
             ))}
