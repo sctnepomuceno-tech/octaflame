@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { subMonths, format as formatDate } from "date-fns";
+import { subMonths, subWeeks, addWeeks, startOfMonth, startOfWeek, format as formatDate } from "date-fns";
 
 import { requirePermission } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
@@ -28,6 +28,13 @@ const OVERVIEW_METRICS = [
   { value: "accounts", label: "New accounts" },
 ] as const;
 type OverviewMetric = (typeof OVERVIEW_METRICS)[number]["value"];
+
+const GRANULARITIES = [
+  { value: "month", label: "Month" },
+  { value: "week", label: "Week" },
+] as const;
+type Granularity = (typeof GRANULARITIES)[number]["value"];
+const TREND_PERIODS: Record<Granularity, number> = { month: TREND_MONTHS, week: 12 };
 
 function StatCard({ label, value, sub }: { label: string; value: string; sub?: string }) {
   return (
@@ -70,6 +77,20 @@ function RankedList({
   );
 }
 
+function periodKeyFor(dateStr: string, granularity: Granularity): string {
+  if (granularity === "month") return monthKey(dateStr);
+  return formatDate(startOfWeek(new Date(`${dateStr}T00:00:00`), { weekStartsOn: 1 }), "yyyy-MM-dd");
+}
+
+function addPeriods(key: string, n: number, granularity: Granularity): string {
+  if (granularity === "month") return addMonthsToKey(key, n);
+  return formatDate(addWeeks(new Date(`${key}T00:00:00`), n), "yyyy-MM-dd");
+}
+
+function periodLabel(key: string, granularity: Granularity): string {
+  return formatDate(new Date(`${key}T00:00:00`), granularity === "month" ? "MMM" : "MMM d");
+}
+
 export default async function AnalyticsPage(props: {
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
@@ -79,14 +100,31 @@ export default async function AnalyticsPage(props: {
     (HEATMAP_METRICS.find((m) => m.value === params.heatmap)?.value as HeatmapMetric) ?? "volume";
   const overviewMetric: OverviewMetric =
     (OVERVIEW_METRICS.find((m) => m.value === params.overview)?.value as OverviewMetric) ?? "volume";
+  const granularity: Granularity =
+    (GRANULARITIES.find((g) => g.value === params.granularity)?.value as Granularity) ?? "month";
 
   const supabase = await createClient();
   const volumeConstants = await getVolumeConstants();
   const kgPerCanister = volumeConstants.kgPerCanister;
   const canistersPerCrate = volumeConstants.canistersPerCrate;
   const today = todayDateString();
-  const trendStart = formatDate(subMonths(todayInManila(), TREND_MONTHS - 1), "yyyy-MM-01");
-  const priorYearStart = formatDate(subMonths(todayInManila(), TREND_MONTHS - 1 + 12), "yyyy-MM-01");
+  const trendPeriods = TREND_PERIODS[granularity];
+
+  // The trend window itself follows the chosen granularity (trailing 12
+  // weeks vs. trailing 12 months), but MoM/YoY below always compares real
+  // calendar months regardless — so the fetch has to reach back far enough
+  // for that even when the window on screen is just a few weeks.
+  const trendStartDate =
+    granularity === "week"
+      ? startOfWeek(subWeeks(todayInManila(), trendPeriods - 1), { weekStartsOn: 1 })
+      : startOfMonth(subMonths(todayInManila(), trendPeriods - 1));
+  const trendStart = formatDate(trendStartDate, "yyyy-MM-dd");
+  const priorWindowStart = formatDate(
+    granularity === "week" ? subWeeks(trendStartDate, trendPeriods) : subMonths(trendStartDate, trendPeriods),
+    "yyyy-MM-dd"
+  );
+  const yoyFloorStart = formatDate(subMonths(todayInManila(), 13), "yyyy-MM-01");
+  const fetchStart = priorWindowStart < yoyFloorStart ? priorWindowStart : yoyFloorStart;
 
   const [
     { data: sales },
@@ -100,7 +138,7 @@ export default async function AnalyticsPage(props: {
     supabase
       .from("sales")
       .select("id, sale_date, deployment_date, dsp_id, municipality_id, customer_id, customer_type, total_volume_kg, total_amount, is_repeat_purchase")
-      .gte("sale_date", priorYearStart)
+      .gte("sale_date", fetchStart)
       .lte("sale_date", today)
       .is("deleted_at", null),
     supabase.from("customers").select("first_purchase_date, customer_type, dsp_id").is("deleted_at", null),
@@ -128,32 +166,35 @@ export default async function AnalyticsPage(props: {
     ? await supabase.from("sale_items").select("product_id, line_total").in("sale_id", trendSaleIds)
     : { data: [] as { product_id: string; line_total: number }[] };
 
-  // --- Sales trend (last 12 months) -------------------------------------------
-  const volumeByMonth = new Map<string, number>();
+  // --- Sales trend (trailing weeks or months, per the granularity toggle) ------
+  const volumeByPeriod = new Map<string, number>();
   for (const s of trendSales) {
-    const k = monthKey(s.sale_date);
-    volumeByMonth.set(k, (volumeByMonth.get(k) ?? 0) + s.total_volume_kg);
+    const k = periodKeyFor(s.sale_date, granularity);
+    volumeByPeriod.set(k, (volumeByPeriod.get(k) ?? 0) + s.total_volume_kg);
   }
-  const trendMonths = Array.from({ length: TREND_MONTHS }, (_, i) => addMonthsToKey(monthKey(trendStart), i));
-  const trendData = trendMonths.map((k) => ({
+  const trendPeriodKeys = Array.from({ length: trendPeriods }, (_, i) =>
+    addPeriods(periodKeyFor(trendStart, granularity), i, granularity)
+  );
+  const trendData = trendPeriodKeys.map((k) => ({
     key: k,
-    label: formatDate(new Date(`${k}-01T00:00:00`), "MMM"),
-    value: (volumeByMonth.get(k) ?? 0) / kgPerCanister,
+    label: periodLabel(k, granularity),
+    value: (volumeByPeriod.get(k) ?? 0) / kgPerCanister,
   }));
 
-  // --- MoM / YoY growth ---------------------------------------------------------
-  const latestMonth = trendMonths[trendMonths.length - 1];
-  const previousMonth = addMonthsToKey(latestMonth, -1);
-  const sameMonthLastYear = addMonthsToKey(latestMonth, -12);
+  // --- MoM / YoY growth (always real calendar months, independent of the
+  // chart's week/month granularity above) --------------------------------------
+  const currentMonth = monthKey(today);
+  const previousMonth = addMonthsToKey(currentMonth, -1);
+  const sameMonthLastYear = addMonthsToKey(currentMonth, -12);
   const volumeAllMonths = new Map<string, number>();
   for (const s of allSales) {
     const k = monthKey(s.sale_date);
     volumeAllMonths.set(k, (volumeAllMonths.get(k) ?? 0) + s.total_volume_kg);
   }
-  const mom = growthPct(volumeAllMonths.get(latestMonth) ?? 0, volumeAllMonths.get(previousMonth) ?? 0);
+  const mom = growthPct(volumeAllMonths.get(currentMonth) ?? 0, volumeAllMonths.get(previousMonth) ?? 0);
   const yoy =
     volumeAllMonths.has(sameMonthLastYear) && (volumeAllMonths.get(sameMonthLastYear) ?? 0) > 0
-      ? growthPct(volumeAllMonths.get(latestMonth) ?? 0, volumeAllMonths.get(sameMonthLastYear) ?? 0)
+      ? growthPct(volumeAllMonths.get(currentMonth) ?? 0, volumeAllMonths.get(sameMonthLastYear) ?? 0)
       : null;
 
   // --- Repeat customer % --------------------------------------------------------
@@ -186,10 +227,11 @@ export default async function AnalyticsPage(props: {
   const currentStockOnHand = (stockBalances ?? []).reduce((s, b) => s + Math.max(b.balance, 0), 0);
   const inventoryTurnover = currentStockOnHand > 0 ? totalSoldUnits / currentStockOnHand : null;
 
-  // --- Deployment frequency (deployments per DSP per week, trailing 12mo) --------
+  // --- Deployment frequency (deployments per DSP per week, trailing window) ------
   const deploymentCount = trendSales.filter((s) => s.deployment_date).length;
   const activeDspCount = Math.max(1, (dsps ?? []).length);
-  const deploymentsPerDspPerWeek = deploymentCount / activeDspCount / (TREND_MONTHS * 4.345);
+  const trendWindowWeeks = granularity === "week" ? trendPeriods : trendPeriods * 4.345;
+  const deploymentsPerDspPerWeek = deploymentCount / activeDspCount / trendWindowWeeks;
 
   // --- Customer acquisition curve (RTL/WS, cumulative toward the 300 target) -----
   // Matches company_kpi_progress's definition exactly — SD (Subdealer)
@@ -200,19 +242,19 @@ export default async function AnalyticsPage(props: {
     (c) => (c.customer_type === "RTL" || c.customer_type === "WS") && c.first_purchase_date
   );
   const baselineCount = acquisitions.filter((c) => c.first_purchase_date! < trendStart).length;
-  const acquisitionsByMonth = new Map<string, number>();
+  const acquisitionsByPeriod = new Map<string, number>();
   for (const c of acquisitions) {
     if (c.first_purchase_date! < trendStart) continue;
-    const k = monthKey(c.first_purchase_date!);
-    acquisitionsByMonth.set(k, (acquisitionsByMonth.get(k) ?? 0) + 1);
+    const k = periodKeyFor(c.first_purchase_date!, granularity);
+    acquisitionsByPeriod.set(k, (acquisitionsByPeriod.get(k) ?? 0) + 1);
   }
   let running = baselineCount;
-  const acquisitionCurve = trendMonths.map((k) => {
-    running += acquisitionsByMonth.get(k) ?? 0;
-    return { key: k, label: formatDate(new Date(`${k}-01T00:00:00`), "MMM"), value: running };
+  const acquisitionCurve = trendPeriodKeys.map((k) => {
+    running += acquisitionsByPeriod.get(k) ?? 0;
+    return { key: k, label: periodLabel(k, granularity), value: running };
   });
-  const monthlyAccountsData = trendMonths.map((k) => {
-    return { key: k, label: formatDate(new Date(`${k}-01T00:00:00`), "MMM"), value: acquisitionsByMonth.get(k) ?? 0 };
+  const periodAccountsData = trendPeriodKeys.map((k) => {
+    return { key: k, label: periodLabel(k, granularity), value: acquisitionsByPeriod.get(k) ?? 0 };
   });
 
   // --- Municipality heatmap -------------------------------------------------------
@@ -227,7 +269,7 @@ export default async function AnalyticsPage(props: {
       municipalityAccounts.set(s.municipality_id, set);
     }
   }
-  const priorTrendSales = allSales.filter((s) => s.sale_date >= priorYearStart && s.sale_date < trendStart);
+  const priorTrendSales = allSales.filter((s) => s.sale_date >= priorWindowStart && s.sale_date < trendStart);
   for (const s of priorTrendSales) {
     municipalityPrevVolume.set(s.municipality_id, (municipalityPrevVolume.get(s.municipality_id) ?? 0) + s.total_volume_kg);
   }
@@ -243,11 +285,34 @@ export default async function AnalyticsPage(props: {
   });
   const maxMetric = Math.max(1, ...heatmapRows.map((r) => Math.abs(r.metricValue)));
 
+  const withParam = (key: string, value: string) => {
+    const sp = new URLSearchParams({ heatmap: heatmapMetric, overview: overviewMetric, granularity });
+    sp.set(key, value);
+    return `/analytics?${sp.toString()}`;
+  };
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 p-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight">Analytics</h1>
-        <p className="text-sm text-muted-foreground">Trailing {TREND_MONTHS} months, company-wide.</p>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Analytics</h1>
+          <p className="text-sm text-muted-foreground">
+            Trailing {trendPeriods} {granularity === "week" ? "weeks" : "months"}, company-wide.
+          </p>
+        </div>
+        <div className="flex gap-1 rounded-lg bg-muted p-1">
+          {GRANULARITIES.map((g) => (
+            <Link
+              key={g.value}
+              href={withParam("granularity", g.value)}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                g.value === granularity ? "bg-background shadow-sm" : "text-muted-foreground"
+              }`}
+            >
+              {g.label}
+            </Link>
+          ))}
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -272,12 +337,12 @@ export default async function AnalyticsPage(props: {
       <div className="grid gap-4 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Monthly overview</CardTitle>
+            <CardTitle className="text-base">{granularity === "week" ? "Weekly" : "Monthly"} overview</CardTitle>
             <div className="flex gap-1 rounded-lg bg-muted p-1">
               {OVERVIEW_METRICS.map((m) => (
                 <Link
                   key={m.value}
-                  href={`/analytics?overview=${m.value}`}
+                  href={withParam("overview", m.value)}
                   className={`rounded-md px-2.5 py-1 text-xs font-medium ${
                     m.value === overviewMetric ? "bg-background shadow-sm" : "text-muted-foreground"
                   }`}
@@ -291,7 +356,7 @@ export default async function AnalyticsPage(props: {
             {overviewMetric === "volume" ? (
               <TrendChart data={trendData} formatKind="canisters" />
             ) : (
-              <TrendChart data={monthlyAccountsData} color="var(--accent)" formatKind="count" />
+              <TrendChart data={periodAccountsData} color="var(--accent)" formatKind="count" />
             )}
           </CardContent>
         </Card>
@@ -348,7 +413,7 @@ export default async function AnalyticsPage(props: {
             {HEATMAP_METRICS.map((m) => (
               <Link
                 key={m.value}
-                href={`/analytics?heatmap=${m.value}`}
+                href={withParam("heatmap", m.value)}
                 className={`rounded-md px-2.5 py-1 text-xs font-medium ${
                   m.value === heatmapMetric ? "bg-background shadow-sm" : "text-muted-foreground"
                 }`}

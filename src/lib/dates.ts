@@ -1,5 +1,5 @@
 import { toZonedTime } from "date-fns-tz";
-import { startOfWeek, startOfMonth, startOfYear, subDays, format } from "date-fns";
+import { startOfWeek, startOfMonth, startOfYear, endOfMonth, subDays, format } from "date-fns";
 
 export const BUSINESS_TIMEZONE = "Asia/Manila";
 
@@ -22,6 +22,16 @@ export function periodStartDate(period: Period): string {
     case "ytd":
       return format(startOfYear(now), "yyyy-MM-dd");
   }
+}
+
+/** Inclusive start/end dates (YYYY-MM-DD) for a "YYYY-MM" month key. */
+export function monthRange(month: string): { start: string; end: string } {
+  const [year, m] = month.split("-").map(Number);
+  const first = new Date(year, m - 1, 1);
+  return {
+    start: format(first, "yyyy-MM-dd"),
+    end: format(endOfMonth(first), "yyyy-MM-dd"),
+  };
 }
 
 export function todayDateString(): string {

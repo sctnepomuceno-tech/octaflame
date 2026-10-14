@@ -22,6 +22,8 @@ export default async function HomePage(props: {
   const params = await props.searchParams;
   const periodParam = typeof params.period === "string" ? params.period : "mtd";
   const period = VALID_PERIODS.find((p) => p === periodParam) ?? "mtd";
+  const monthParam = typeof params.month === "string" ? params.month : undefined;
+  const month = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : undefined;
 
   const supabase = await createClient();
 
@@ -77,7 +79,7 @@ export default async function HomePage(props: {
             <SingleManagementBanner />
           </div>
         ) : null}
-        <ManagementDashboard period={period} />
+        <ManagementDashboard period={period} month={month} />
       </>
     );
   }

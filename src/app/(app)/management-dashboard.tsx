@@ -7,6 +7,7 @@ import { getVolumeConstants } from "@/lib/volume/constants";
 import { formatCount, formatPcsAndCrates } from "@/lib/volume/format";
 import { computeKpiPace, accountsPaceSummary } from "@/lib/kpi";
 import { todayDateString, type Period } from "@/lib/dates";
+import { monthKey, addMonthsToKey } from "@/lib/analytics";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -14,6 +15,7 @@ import { AnimatedNumber } from "@/components/motion/animated-number";
 import { StaggerGrid, StaggerItem } from "@/components/motion/stagger-grid";
 import { cn } from "@/lib/utils";
 import { ManagementTier2 } from "./management-tier2";
+import { MonthSelect } from "./month-select";
 
 const CURRENT_YEAR = new Date().getFullYear();
 const CURRENT_MONTH = new Date().getMonth() + 1;
@@ -222,7 +224,16 @@ function Tier2Skeleton() {
   );
 }
 
-export async function ManagementDashboard({ period }: { period: Period }) {
+function monthOptions(count: number): { value: string; label: string }[] {
+  const currentKey = monthKey(todayDateString());
+  return Array.from({ length: count }, (_, i) => {
+    const key = addMonthsToKey(currentKey, -i);
+    const [y, m] = key.split("-").map(Number);
+    return { value: key, label: `${MONTH_NAMES[m - 1]} ${y}` };
+  });
+}
+
+export async function ManagementDashboard({ period, month }: { period: Period; month?: string }) {
   const supabase = await createClient();
   const volumeConstants = await getVolumeConstants();
   const canistersPerCrate = volumeConstants.canistersPerCrate;
@@ -374,24 +385,29 @@ export async function ManagementDashboard({ period }: { period: Period }) {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h2 className="text-base font-semibold">This period</h2>
-        <div className="flex gap-1 rounded-lg bg-muted p-1">
-          {PERIODS.map((p) => (
-            <Link
-              key={p.value}
-              href={`/?period=${p.value}`}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-sm font-medium",
-                p.value === period ? "bg-background shadow-sm" : "text-muted-foreground"
-              )}
-            >
-              {p.label}
-            </Link>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          {period === "mtd" ? (
+            <MonthSelect value={month ?? monthKey(todayDateString())} options={monthOptions(12)} />
+          ) : null}
+          <div className="flex gap-1 rounded-lg bg-muted p-1">
+            {PERIODS.map((p) => (
+              <Link
+                key={p.value}
+                href={`/?period=${p.value}`}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium",
+                  p.value === period ? "bg-background shadow-sm" : "text-muted-foreground"
+                )}
+              >
+                {p.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
 
-      <Suspense fallback={<Tier2Skeleton />} key={period}>
-        <ManagementTier2 period={period} />
+      <Suspense fallback={<Tier2Skeleton />} key={`${period}-${month ?? ""}`}>
+        <ManagementTier2 period={period} month={month} />
       </Suspense>
     </div>
   );

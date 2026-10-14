@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
-import { periodStartDate, todayDateString, type Period } from "@/lib/dates";
+import { periodStartDate, todayDateString, monthRange, type Period } from "@/lib/dates";
+import { monthKey } from "@/lib/analytics";
 import { formatCount, formatCurrency, formatKg, formatPercent } from "@/lib/volume/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,10 +14,17 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
-export async function ManagementTier2({ period }: { period: Period }) {
+export async function ManagementTier2({ period, month }: { period: Period; month?: string }) {
   const supabase = await createClient();
-  const start = periodStartDate(period);
   const today = todayDateString();
+  // A chosen month only applies to the MTD view — other periods ignore it.
+  const { start, end } =
+    period === "mtd" && month
+      ? (() => {
+          const range = monthRange(month);
+          return { start: range.start, end: month === monthKey(today) ? today : range.end };
+        })()
+      : { start: periodStartDate(period), end: today };
 
   const [{ data: sales }, { data: dsps }, { data: municipalities }, { data: customers }, { data: dspProfiles }, { data: tasks }] =
     await Promise.all([
@@ -24,7 +32,7 @@ export async function ManagementTier2({ period }: { period: Period }) {
         .from("sales")
         .select("dsp_id, municipality_id, customer_id, customer_type, total_amount, total_canisters, total_volume_kg, is_repeat_purchase")
         .gte("sale_date", start)
-        .lte("sale_date", today),
+        .lte("sale_date", end),
       supabase.from("dsps").select("id, name").eq("active", true).order("name"),
       supabase.from("municipalities").select("id, name, dsp_id").eq("active", true).order("name"),
       supabase.from("customers").select("id, first_purchase_date, dsp_id, customer_type"),
@@ -94,7 +102,7 @@ export async function ManagementTier2({ period }: { period: Period }) {
       c.customer_type !== "HH" &&
       c.first_purchase_date &&
       c.first_purchase_date >= start &&
-      c.first_purchase_date <= today &&
+      c.first_purchase_date <= end &&
       c.dsp_id
     ) {
       const agg = dspAggById.get(c.dsp_id);
