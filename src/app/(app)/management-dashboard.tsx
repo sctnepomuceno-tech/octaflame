@@ -381,6 +381,7 @@ export async function ManagementDashboard({ period, month }: { period: Period; m
             <MonthSelect
               value={month ?? monthKey(todayDateString())}
               options={recentMonthOptions(monthKey(todayDateString()), 12)}
+              params={{ period: "mtd" }}
             />
           ) : null}
           <div className="flex gap-1 rounded-lg bg-muted p-1">

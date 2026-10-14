@@ -316,7 +316,8 @@ export default async function AnalyticsPage(props: {
           <MonthSelect
             value={selectedMonth}
             options={recentMonthOptions(monthKey(today), 12)}
-            hrefFor={(v) => withParam("month", v)}
+            basePath="/analytics"
+            params={{ heatmap: heatmapMetric, overview: overviewMetric, granularity }}
           />
           <div className="flex gap-1 rounded-lg bg-muted p-1">
             {GRANULARITIES.map((g) => (

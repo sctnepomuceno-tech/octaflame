@@ -13,18 +13,27 @@ import {
 export function MonthSelect({
   value,
   options,
-  hrefFor,
+  basePath = "/",
+  params = {},
 }: {
   value: string;
   options: { value: string; label: string }[];
-  /** Builds the URL to navigate to for a chosen month key. Defaults to the Management dashboard's MTD view. */
-  hrefFor?: (month: string) => string;
+  /** Page to navigate to. Defaults to the Management dashboard's MTD view. */
+  basePath?: string;
+  /** Other query params to carry over alongside "month" — plain strings only, since this is a Client Component. */
+  params?: Record<string, string>;
 }) {
   const router = useRouter();
-  const buildHref = hrefFor ?? ((v: string) => `/?period=mtd&month=${v}`);
 
   return (
-    <Select value={value} onValueChange={(v) => router.push(buildHref(v))}>
+    <Select
+      value={value}
+      onValueChange={(v) => {
+        const sp = new URLSearchParams(params);
+        sp.set("month", v);
+        router.push(`${basePath}?${sp.toString()}`);
+      }}
+    >
       <SelectTrigger className="w-[150px]">
         <SelectValue />
       </SelectTrigger>
