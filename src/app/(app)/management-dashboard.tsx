@@ -7,7 +7,7 @@ import { getVolumeConstants } from "@/lib/volume/constants";
 import { formatCount, formatPcsAndCrates } from "@/lib/volume/format";
 import { computeKpiPace, accountsPaceSummary } from "@/lib/kpi";
 import { todayDateString, type Period } from "@/lib/dates";
-import { monthKey, addMonthsToKey } from "@/lib/analytics";
+import { monthKey, recentMonthOptions } from "@/lib/analytics";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -224,15 +224,6 @@ function Tier2Skeleton() {
   );
 }
 
-function monthOptions(count: number): { value: string; label: string }[] {
-  const currentKey = monthKey(todayDateString());
-  return Array.from({ length: count }, (_, i) => {
-    const key = addMonthsToKey(currentKey, -i);
-    const [y, m] = key.split("-").map(Number);
-    return { value: key, label: `${MONTH_NAMES[m - 1]} ${y}` };
-  });
-}
-
 export async function ManagementDashboard({ period, month }: { period: Period; month?: string }) {
   const supabase = await createClient();
   const volumeConstants = await getVolumeConstants();
@@ -387,7 +378,10 @@ export async function ManagementDashboard({ period, month }: { period: Period; m
         <h2 className="text-base font-semibold">This period</h2>
         <div className="flex flex-wrap items-center gap-2">
           {period === "mtd" ? (
-            <MonthSelect value={month ?? monthKey(todayDateString())} options={monthOptions(12)} />
+            <MonthSelect
+              value={month ?? monthKey(todayDateString())}
+              options={recentMonthOptions(monthKey(todayDateString()), 12)}
+            />
           ) : null}
           <div className="flex gap-1 rounded-lg bg-muted p-1">
             {PERIODS.map((p) => (

@@ -5,12 +5,13 @@ import { subMonths, subWeeks, addWeeks, startOfMonth, startOfWeek, format as for
 import { requirePermission } from "@/lib/auth/current-user";
 import { createClient } from "@/lib/supabase/server";
 import { getVolumeConstants } from "@/lib/volume/constants";
-import { todayInManila, todayDateString } from "@/lib/dates";
-import { monthKey, addMonthsToKey, growthPct } from "@/lib/analytics";
+import { todayDateString, monthRange } from "@/lib/dates";
+import { monthKey, addMonthsToKey, growthPct, recentMonthOptions } from "@/lib/analytics";
 import { formatCanisters, formatCount, formatCurrency, formatPercent, formatPcsAndCrates } from "@/lib/volume/format";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendChart } from "./sales-trend-chart";
+import { MonthSelect } from "../month-select";
 
 export const metadata: Metadata = { title: "Analytics" };
 
@@ -110,20 +111,30 @@ export default async function AnalyticsPage(props: {
   const today = todayDateString();
   const trendPeriods = TREND_PERIODS[granularity];
 
+  // Which month the trailing window ends at — defaults to the current
+  // month, but can be wound back so the whole page re-views an earlier
+  // period instead of always ending "now".
+  const monthParam = typeof params.month === "string" ? params.month : undefined;
+  const selectedMonth = monthParam && /^\d{4}-\d{2}$/.test(monthParam) ? monthParam : monthKey(today);
+  const isCurrentMonth = selectedMonth === monthKey(today);
+  const anchorDate = isCurrentMonth ? today : monthRange(selectedMonth).end;
+  const anchor = new Date(`${anchorDate}T00:00:00`);
+
   // The trend window itself follows the chosen granularity (trailing 12
   // weeks vs. trailing 12 months), but MoM/YoY below always compares real
-  // calendar months regardless — so the fetch has to reach back far enough
-  // for that even when the window on screen is just a few weeks.
+  // calendar months relative to the selected month regardless — so the
+  // fetch has to reach back far enough for that even when the window on
+  // screen is just a few weeks.
   const trendStartDate =
     granularity === "week"
-      ? startOfWeek(subWeeks(todayInManila(), trendPeriods - 1), { weekStartsOn: 1 })
-      : startOfMonth(subMonths(todayInManila(), trendPeriods - 1));
+      ? startOfWeek(subWeeks(anchor, trendPeriods - 1), { weekStartsOn: 1 })
+      : startOfMonth(subMonths(anchor, trendPeriods - 1));
   const trendStart = formatDate(trendStartDate, "yyyy-MM-dd");
   const priorWindowStart = formatDate(
     granularity === "week" ? subWeeks(trendStartDate, trendPeriods) : subMonths(trendStartDate, trendPeriods),
     "yyyy-MM-dd"
   );
-  const yoyFloorStart = formatDate(subMonths(todayInManila(), 13), "yyyy-MM-01");
+  const yoyFloorStart = formatDate(subMonths(anchor, 13), "yyyy-MM-01");
   const fetchStart = priorWindowStart < yoyFloorStart ? priorWindowStart : yoyFloorStart;
 
   const [
@@ -139,7 +150,7 @@ export default async function AnalyticsPage(props: {
       .from("sales")
       .select("id, sale_date, deployment_date, dsp_id, municipality_id, customer_id, customer_type, total_volume_kg, total_amount, is_repeat_purchase")
       .gte("sale_date", fetchStart)
-      .lte("sale_date", today)
+      .lte("sale_date", anchorDate)
       .is("deleted_at", null),
     supabase.from("customers").select("first_purchase_date, customer_type, dsp_id").is("deleted_at", null),
     supabase.from("dsps").select("id, name").eq("active", true),
@@ -150,7 +161,7 @@ export default async function AnalyticsPage(props: {
       .select("quantity")
       .eq("movement_type", "sold")
       .gte("movement_date", trendStart)
-      .lte("movement_date", today),
+      .lte("movement_date", anchorDate),
     supabase.from("dsp_stock_balance").select("balance"),
   ]);
 
@@ -181,9 +192,9 @@ export default async function AnalyticsPage(props: {
     value: (volumeByPeriod.get(k) ?? 0) / kgPerCanister,
   }));
 
-  // --- MoM / YoY growth (always real calendar months, independent of the
-  // chart's week/month granularity above) --------------------------------------
-  const currentMonth = monthKey(today);
+  // --- MoM / YoY growth (always real calendar months around the selected
+  // month, independent of the chart's week/month granularity above) -----------
+  const currentMonth = selectedMonth;
   const previousMonth = addMonthsToKey(currentMonth, -1);
   const sameMonthLastYear = addMonthsToKey(currentMonth, -12);
   const volumeAllMonths = new Map<string, number>();
@@ -286,7 +297,7 @@ export default async function AnalyticsPage(props: {
   const maxMetric = Math.max(1, ...heatmapRows.map((r) => Math.abs(r.metricValue)));
 
   const withParam = (key: string, value: string) => {
-    const sp = new URLSearchParams({ heatmap: heatmapMetric, overview: overviewMetric, granularity });
+    const sp = new URLSearchParams({ heatmap: heatmapMetric, overview: overviewMetric, granularity, month: selectedMonth });
     sp.set(key, value);
     return `/analytics?${sp.toString()}`;
   };
@@ -297,21 +308,29 @@ export default async function AnalyticsPage(props: {
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Analytics</h1>
           <p className="text-sm text-muted-foreground">
-            Trailing {trendPeriods} {granularity === "week" ? "weeks" : "months"}, company-wide.
+            Trailing {trendPeriods} {granularity === "week" ? "weeks" : "months"} through{" "}
+            {isCurrentMonth ? "today" : formatDate(anchor, "MMMM yyyy")}, company-wide.
           </p>
         </div>
-        <div className="flex gap-1 rounded-lg bg-muted p-1">
-          {GRANULARITIES.map((g) => (
-            <Link
-              key={g.value}
-              href={withParam("granularity", g.value)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium ${
-                g.value === granularity ? "bg-background shadow-sm" : "text-muted-foreground"
-              }`}
-            >
-              {g.label}
-            </Link>
-          ))}
+        <div className="flex flex-wrap items-center gap-2">
+          <MonthSelect
+            value={selectedMonth}
+            options={recentMonthOptions(monthKey(today), 12)}
+            hrefFor={(v) => withParam("month", v)}
+          />
+          <div className="flex gap-1 rounded-lg bg-muted p-1">
+            {GRANULARITIES.map((g) => (
+              <Link
+                key={g.value}
+                href={withParam("granularity", g.value)}
+                className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                  g.value === granularity ? "bg-background shadow-sm" : "text-muted-foreground"
+                }`}
+              >
+                {g.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
 

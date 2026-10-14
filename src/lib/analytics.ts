@@ -17,3 +17,17 @@ export function addMonthsToKey(key: string, months: number): string {
   const newM = (total % 12) + 1;
   return `${newY}-${String(newM).padStart(2, "0")}`;
 }
+
+const MONTH_NAMES = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+/** The current month plus the `count - 1` months before it, newest first, for a month-picker dropdown. */
+export function recentMonthOptions(currentKey: string, count: number): { value: string; label: string }[] {
+  return Array.from({ length: count }, (_, i) => {
+    const key = addMonthsToKey(currentKey, -i);
+    const [y, m] = key.split("-").map(Number);
+    return { value: key, label: `${MONTH_NAMES[m - 1]} ${y}` };
+  });
+}
